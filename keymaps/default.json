@@ -1,0 +1,11 @@
+[
+  {
+    "context": "trident",
+    "bindings": {
+      "up": "trident::MoveUp",
+      "down": "trident::MoveDown", 
+      "enter": "trident::SelectHost",
+      "backspace": "trident::HandleBackspace"
+    }
+  }
+]
