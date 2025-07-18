@@ -1,3 +1,5 @@
+#![recursion_limit = "512"]
+
 mod config;
 mod ssh;
 mod fuzzy;
@@ -18,6 +20,7 @@ struct TridentApp {
 }
 
 impl TridentApp {
+    #[cfg(not(test))]
     fn new(cx: &mut Context<Self>) -> Self {
         let mut state = AppState::new();
         
@@ -93,6 +96,7 @@ impl TridentApp {
         }
     }
     
+    #[cfg(not(test))]
     fn render_host_list(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let container = div()
             .flex()
@@ -200,6 +204,11 @@ impl TridentApp {
     }
 }
 
+// Integration tests are challenging with GPUI due to macro complexity
+// Core logic is tested in individual modules (config, ssh, fuzzy, app, ui)
+// UI functionality is tested through manual testing and the running application
+
+#[cfg(not(test))]
 impl Render for TridentApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // Focus the window when it first appears
@@ -233,6 +242,7 @@ impl Render for TridentApp {
     }
 }
 
+#[cfg(not(test))]
 fn main() -> Result<()> {
     Application::new().run(|cx: &mut App| {
         let _ = cx.open_window(
@@ -251,5 +261,11 @@ fn main() -> Result<()> {
         cx.activate(true);
     });
     
+    Ok(())
+}
+
+#[cfg(test)]
+fn main() -> Result<()> {
+    // Tests only main function
     Ok(())
 }
