@@ -17,7 +17,7 @@ impl HostList {
         Self {
             hosts,
             selected_index: 0,
-            max_visible: 10,
+            max_visible: 5,
         }
     }
     

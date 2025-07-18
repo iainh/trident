@@ -118,16 +118,15 @@ impl TridentApp {
             .flex()
             .items_center()
             .w_full()
-            .h(px(60.0))
-            .px_6()
-            .bg(hsla(0.0, 0.0, 1.0, 0.0)) // Transparent
+            .h(px(48.0))
+            .px_4()
             .child(
                 div()
                     .flex()
                     .items_center()
                     .w_full()
                     .text_color(rgb(0x333333))
-                    .text_size(px(20.0))
+                    .text_size(px(18.0))
                     .child(
                         if self.search_input.query.is_empty() {
                             self.search_input.placeholder.clone()
@@ -177,8 +176,8 @@ impl TridentApp {
                     .flex()
                     .items_center()
                     .w_full()
-                    .px_6()
-                    .py_3()
+                    .px_4()
+                    .py_2()
                     .bg(bg_color)
                     .hover(|style| style.bg(hsla(0.58, 1.0, 0.5, 0.05)))
                     .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, _window, cx| {
@@ -192,14 +191,14 @@ impl TridentApp {
                             .child(
                                 div()
                                     .text_color(text_color)
-                                    .text_size(px(16.0))
+                                    .text_size(px(15.0))
                                     .font_weight(FontWeight::MEDIUM)
                                     .child(host.name.clone())
                             )
                             .child(
                                 div()
                                     .text_color(hsla(0.0, 0.0, 0.4, 1.0))
-                                    .text_size(px(13.0))
+                                    .text_size(px(12.0))
                                     .child(host.connection_string.clone())
                             )
                     )
@@ -210,7 +209,7 @@ impl TridentApp {
             .flex()
             .flex_col()
             .w_full()
-            .max_h(px(300.0))
+            .max_h(px(250.0))
             .overflow_y_hidden()
             .children(visible_hosts)
     }
@@ -259,7 +258,6 @@ impl Render for TridentApp {
             .flex()
             .flex_col()
             .size_full()
-            .bg(hsla(0.0, 0.0, 0.0, 0.7)) // Semi-transparent dark background
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>| {
                 this.handle_key_event(event, cx);
@@ -269,14 +267,9 @@ impl Render for TridentApp {
                     .flex()
                     .flex_col()
                     .w_full()
-                    .max_w(px(600.0))
-                    .mx_auto()
-                    .mt_16()
-                    .bg(hsla(0.0, 0.0, 1.0, 0.95)) // Light semi-transparent background
+                    .bg(hsla(0.0, 0.0, 1.0, 0.98)) // Slightly opaque white background
                     .rounded_lg()
-                    .border_1()
-                    .border_color(hsla(0.0, 0.0, 0.0, 0.1))
-                    .shadow_lg()
+                    .shadow_2xl()
                     .overflow_hidden()
                     .child(self.render_search_input())
                     .child(self.render_host_list_if_matches(cx))
@@ -287,10 +280,32 @@ impl Render for TridentApp {
 #[cfg(not(test))]
 fn main() -> Result<()> {
     Application::new().run(|cx: &mut App| {
+        // Get display bounds for positioning
+        let display_bounds = cx.primary_display()
+            .map(|d| d.bounds())
+            .unwrap_or(Bounds {
+                origin: Point::new(px(0.0), px(0.0)),
+                size: Size {
+                    width: px(1920.0),
+                    height: px(1080.0),
+                },
+            });
+        
+        // Position window near top of screen like Spotlight
+        let window_width = px(600.0);
+        let window_height = px(48.0);
+        let x = display_bounds.center().x - window_width / 2.0;
+        let y = px(200.0); // Near top of screen
+        
         let _ = cx.open_window(
             WindowOptions {
-                titlebar: None, // Frameless window
-                window_bounds: Some(WindowBounds::Windowed(Bounds::centered(None, size(px(600.0), px(400.0)), cx))),
+                titlebar: None,
+                window_bounds: Some(WindowBounds::Windowed(Bounds::new(
+                    Point { x, y },
+                    Size { width: window_width, height: window_height },
+                ))),
+                is_movable: false,
+                kind: WindowKind::PopUp,
                 ..Default::default()
             },
             |_, cx| {
