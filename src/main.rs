@@ -138,24 +138,26 @@ impl TridentApp {
     }
     
     #[cfg(not(test))]
-    fn render_host_list_if_matches(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        if self.host_list.hosts.is_empty() || self.search_input.query.is_empty() {
-            // Return an empty div when no matches or no query
-            div()
-        } else {
-            // Show the host list with a separator
-            div()
-                .flex()
-                .flex_col()
-                .border_t_1()
-                .border_color(hsla(0.0, 0.0, 0.0, 0.1))
-                .child(self.render_host_list(cx))
-        }
+    fn render_host_list_always(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        // Always show the host list container with a separator
+        div()
+            .flex()
+            .flex_col()
+            .border_t_1()
+            .border_color(hsla(0.0, 0.0, 0.0, 0.1))
+            .child(self.render_host_list(cx))
     }
 
     #[cfg(not(test))]
     fn render_host_list(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let visible_hosts = self.host_list.hosts.iter()
+        // Show all hosts (filtered or all) if query is empty, up to max_visible
+        let hosts_to_show = if self.search_input.query.is_empty() {
+            &self.state.hosts
+        } else {
+            &self.host_list.hosts
+        };
+
+        let visible_hosts = hosts_to_show.iter()
             .take(self.host_list.max_visible)
             .enumerate()
             .map(|(index, host)| {
@@ -209,8 +211,7 @@ impl TridentApp {
             .flex()
             .flex_col()
             .w_full()
-            .max_h(px(250.0))
-            .overflow_y_hidden()
+            .min_h(px(200.0)) // Consistent minimum height like Zed's command palette
             .children(visible_hosts)
     }
     
@@ -256,8 +257,11 @@ impl Render for TridentApp {
         
         div()
             .flex()
-            .flex_col()
-            .size_full()
+            .items_start()
+            .justify_center()
+            .w_full()
+            .h_full()
+            .pt(px(360.0)) // ~1/3 down from top of screen (1080px / 3)
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>| {
                 this.handle_key_event(event, cx);
@@ -266,13 +270,14 @@ impl Render for TridentApp {
                 div()
                     .flex()
                     .flex_col()
-                    .w_full()
-                    .bg(hsla(0.0, 0.0, 1.0, 0.98)) // Slightly opaque white background
+                    .w(px(600.0)) // Fixed width like Zed's command palette
+                    .max_h(px(400.0)) // Max height constraint
+                    .bg(hsla(0.0, 0.0, 1.0, 0.98))
                     .rounded_lg()
                     .shadow_2xl()
                     .overflow_hidden()
                     .child(self.render_search_input())
-                    .child(self.render_host_list_if_matches(cx))
+                    .child(self.render_host_list_always(cx))
             )
     }
 }
@@ -291,21 +296,15 @@ fn main() -> Result<()> {
                 },
             });
         
-        // Position window near top of screen like Spotlight
-        let window_width = px(600.0);
-        let window_height = px(48.0);
-        let x = display_bounds.center().x - window_width / 2.0;
-        let y = px(200.0); // Near top of screen
-        
+        // Create a fullscreen overlay window to avoid any window shadows
         let _ = cx.open_window(
             WindowOptions {
                 titlebar: None,
-                window_bounds: Some(WindowBounds::Windowed(Bounds::new(
-                    Point { x, y },
-                    Size { width: window_width, height: window_height },
-                ))),
+                window_bounds: Some(WindowBounds::Fullscreen(display_bounds)),
                 is_movable: false,
                 kind: WindowKind::PopUp,
+                window_background: WindowBackgroundAppearance::Transparent,
+                window_decorations: Some(WindowDecorations::Client),
                 ..Default::default()
             },
             |_, cx| {
