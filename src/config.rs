@@ -310,6 +310,11 @@ case_sensitive = false
     fn detect_best_terminal() -> DetectedTerminal {
         let terminals = vec![
             DetectedTerminal {
+                name: "Ghostty".to_string(),
+                program: "/Applications/Ghostty.app/Contents/MacOS/ghostty".to_string(),
+                args: vec!["-e".to_string(), "{ssh_command}".to_string()],
+            },
+            DetectedTerminal {
                 name: "iTerm2".to_string(),
                 program: "/Applications/iTerm.app/Contents/MacOS/iTerm2".to_string(),
                 args: vec![
@@ -368,6 +373,8 @@ case_sensitive = false
     /// Generate commented examples for other terminals
     fn generate_terminal_examples(current_terminal: &str) -> String {
         let examples = vec![
+            ("Ghostty", r#"# program = "/Applications/Ghostty.app/Contents/MacOS/ghostty"
+# args = ["-e", "{ssh_command}"]"#),
             ("iTerm2", r#"# program = "/Applications/iTerm.app/Contents/MacOS/iTerm2"
 # args = ["-c", "tell application \"iTerm2\" to create window with default profile command \"{ssh_command}\""]"#),
             ("Terminal.app", r#"# program = "/usr/bin/osascript"
