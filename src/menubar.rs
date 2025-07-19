@@ -43,6 +43,7 @@ declare_class!(
 
     unsafe impl NSObjectProtocol for MenuBarDelegate {}
 
+
     unsafe impl MenuBarDelegate {
         #[method(openTrident:)]
         fn open_trident(&self, _sender: Option<&AnyObject>) {
