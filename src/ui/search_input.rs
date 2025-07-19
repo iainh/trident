@@ -82,7 +82,7 @@ impl IntoElement for SearchInput {
             .border_1()
             .border_color(border_color)
             .rounded_md()
-            .bg(rgb(0x2d2d2d))
+            .bg(rgb(0x1e1e1e)) // Darker background for better contrast
             .child(
                 div()
                     .flex()
@@ -127,8 +127,10 @@ impl IntoElement for SearchInput {
                                         .items_center()
                                         .child(
                                             div()
-                                                .text_color(rgb(0xffffff))
-                                                .child(self.query.clone())
+                                                .text_color(rgb(0xffffff)) // Bright white for visibility
+                                                .font_weight(FontWeight::NORMAL)
+                                                .text_size(px(16.0))
+                                                .child(format!("{}", self.query))
                                         )
                                         .when(self.is_focused && !self.query.is_empty(), |this| {
                                             // Show Zed-style cursor right after typed text

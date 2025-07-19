@@ -225,12 +225,12 @@ impl TridentApp {
                 // Accept autocomplete suggestion
                 self.search_input.accept_suggestion();
                 self.update_search();
-                // cx.notify();
+                cx.notify();
             }
             "backspace" => {
                 self.search_input.handle_backspace();
                 self.update_search();
-                // cx.notify();
+                cx.notify();
             }
             text => {
                 // Handle regular character input
