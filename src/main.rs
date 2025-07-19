@@ -215,8 +215,15 @@ impl TridentApp {
             &self.host_list.hosts
         };
 
-        let visible_hosts = hosts_to_show.iter()
-            .take(self.host_list.max_visible)
+        // Calculate visible hosts and their count for dynamic sizing
+        // Limit to a reasonable number that fits well on screen
+        let max_items_to_show = 8; // Show up to 8 items for good UX
+        
+        let hosts_to_render: Vec<_> = hosts_to_show.iter()
+            .take(max_items_to_show)
+            .collect();
+
+        let visible_hosts = hosts_to_render.iter()
             .enumerate()
             .map(|(index, host)| {
                 let is_selected = index == self.host_list.selected_index;
@@ -262,13 +269,34 @@ impl TridentApp {
             })
             .collect::<Vec<_>>();
         
+        let host_count = hosts_to_render.len();
+        let is_empty = host_count == 0;
+        
         div()
             .flex()
             .flex_col()
             .w_full()
-            .min_h(px(200.0)) // Consistent minimum height like Zed's command palette
-            .bg(ZedTheme::surface_background())
-            .children(visible_hosts)
+            .when(is_empty, |this| {
+                // Show minimal height when no results
+                this.h(px(60.0))  // Fixed height for "no results" message
+                    .bg(ZedTheme::surface_background())
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .h_full()
+                            .text_color(ZedTheme::text_muted())
+                            .text_size(px(14.0))
+                            .child("No hosts found")
+                    )
+            })
+            .when(!is_empty, |this| {
+                // Let GPUI calculate natural height, but constrain maximum height
+                this.max_h(px(400.0)) // Prevent window from getting too tall
+                    .bg(ZedTheme::surface_background())
+                    .children(visible_hosts)
+            })
     }
     
     fn update_search(&mut self) {
@@ -353,7 +381,7 @@ impl Render for TridentApp {
                     .flex()
                     .flex_col()
                     .w(px(600.0)) // Fixed width like Zed's command palette
-                    .max_h(px(400.0)) // Max height constraint
+                    .max_h(px(500.0)) // Reasonable max height to prevent overflow
                     .bg(ZedTheme::elevated_surface_background())
                     .border_1()
                     .border_color(ZedTheme::border())
