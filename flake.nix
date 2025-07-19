@@ -32,6 +32,7 @@
           cargo-bundle
           cargo-audit
           cargo-deny
+          cargo-outdated
           pkg-config
           openssl
         ] ++ darwinDeps;
@@ -190,6 +191,7 @@
             echo "  cargo clippy         - Run linter"
             echo "  cargo fmt            - Format code"
             echo "  cargo audit          - Security audit"
+            echo "  cargo outdated       - Check for outdated dependencies"
             echo "  ./build-app.sh       - Build macOS .app bundle"
             echo ""
             echo "Nix commands:"
