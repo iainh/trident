@@ -78,7 +78,6 @@ impl IntoElement for HostList {
                 .justify_center()
                 .w_full()
                 .h(px(60.0))
-                .bg(rgb(0x252930)) // Zed surface background
                 .text_color(rgb(0x8c8c8c)) // Zed muted text
                 .text_size(px(14.0))
                 .child("No hosts found");
@@ -91,7 +90,6 @@ impl IntoElement for HostList {
             .w_full()
             .max_h(px(400.0))
             .overflow_hidden()
-            .bg(rgb(0x252930)) // Zed surface background
             .children(
                 self.hosts
                     .iter()
@@ -106,12 +104,8 @@ impl IntoElement for HostList {
                             .w_full()
                             .px_3()
                             .py_2()
-                            .bg(if is_selected {
-                                hsla(207.0 / 360.0, 0.7, 0.25, 0.2)
-                            } else {
-                                rgb(0x252930).into()
-                            })
-                            .hover(|style| style.bg(rgb(0x454a55)))
+                            .when(is_selected, |style| style.bg(hsla(207.0 / 360.0, 0.7, 0.25, 0.2)))
+                            .when(!is_selected, |style| style.hover(|hover_style| hover_style.bg(rgb(0x454a55))))
                             .child(
                                 div()
                                     .flex()

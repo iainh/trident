@@ -79,10 +79,6 @@ impl IntoElement for SearchInput {
             .h(px(40.0))
             .px_3()
             .py_2()
-            .border_1()
-            .border_color(border_color)
-            .rounded_md()
-            .bg(rgb(0x1e1e1e)) // Darker background for better contrast
             .child(
                 div()
                     .flex()
