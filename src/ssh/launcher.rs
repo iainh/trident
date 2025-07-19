@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use std::process::Command;
 use crate::config::TerminalConfig;
 use crate::ssh::parser::HostEntry;
+use crate::Logger;
 
 pub struct TerminalLauncher {
     config: TerminalConfig,
@@ -16,8 +17,11 @@ impl TerminalLauncher {
     }
     
     pub fn launch(&self, host: &HostEntry) -> Result<()> {
+        Logger::debug(&format!("Launching SSH connection to host: {}", host.name));
+        
         // Escape the SSH command for safe shell execution
         let escaped_command = escape_shell_command(&host.connection_string);
+        Logger::debug(&format!("Escaped SSH command: {}", escaped_command));
         
         // Substitute {ssh_command} placeholder in terminal arguments
         let args: Vec<String> = self.config.args
@@ -25,17 +29,28 @@ impl TerminalLauncher {
             .map(|arg| arg.replace("{ssh_command}", &escaped_command))
             .collect();
         
-        // Spawn the terminal process
-        Command::new(&self.config.program)
-            .args(&args)
-            .spawn()
-            .with_context(|| format!(
-                "Failed to launch terminal: {} with args: {:?}", 
-                self.config.program, 
-                args
-            ))?;
+        Logger::debug(&format!("Launching terminal: {} with args: {:?}", self.config.program, args));
         
-        Ok(())
+        // Spawn the terminal process
+        match Command::new(&self.config.program)
+            .args(&args)
+            .spawn() {
+            Ok(_) => {
+                Logger::info(&format!("Successfully launched terminal for host: {}", host.name));
+                Ok(())
+            }
+            Err(e) => {
+                Logger::error(&format!("Failed to launch terminal for host '{}': {}", host.name, e));
+                Logger::error(&format!("  Terminal program: {}", self.config.program));
+                Logger::error(&format!("  Terminal args: {:?}", args));
+                Logger::error("  Check that the terminal program exists and the configuration is correct");
+                Err(e).with_context(|| format!(
+                    "Failed to launch terminal: {} with args: {:?}", 
+                    self.config.program, 
+                    args
+                ))
+            }
+        }
     }
 }
 

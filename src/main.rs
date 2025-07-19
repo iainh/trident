@@ -15,6 +15,29 @@ use ssh::{HostEntry, TerminalLauncher, parse_known_hosts, parse_ssh_config};
 use config::Config;
 use std::path::Path;
 
+// Simple logging utility for troubleshooting
+pub struct Logger;
+
+impl Logger {
+    pub fn info(msg: &str) {
+        println!("[INFO] {}", msg);
+    }
+    
+    pub fn warn(msg: &str) {
+        eprintln!("[WARN] {}", msg);
+    }
+    
+    pub fn error(msg: &str) {
+        eprintln!("[ERROR] {}", msg);
+    }
+    
+    pub fn debug(msg: &str) {
+        if std::env::var("TRIDENT_DEBUG").is_ok() {
+            eprintln!("[DEBUG] {}", msg);
+        }
+    }
+}
+
 // Zed-like theme colors for dark mode
 struct ZedTheme;
 
@@ -133,10 +156,10 @@ impl TridentApp {
         let config_path = Config::default_config_path()?;
         
         if !config_path.exists() {
-            // Create default config file if it doesn't exist
-            Config::save_default_config(&config_path)
-                .map_err(|e| anyhow::anyhow!("Failed to create default configuration file: {}", e))?;
-            println!("Created default configuration at: {}", config_path.display());
+            // Create generated config file with terminal detection
+            Config::save_generated_config(&config_path)
+                .map_err(|e| anyhow::anyhow!("Failed to create configuration file: {}", e))?;
+            Logger::info(&format!("Created configuration with auto-detected terminal at: {}", config_path.display()));
         }
         
         Config::load_from_file(&config_path)
@@ -148,32 +171,50 @@ impl TridentApp {
         
         // Parse known_hosts if enabled
         if config.parsing.parse_known_hosts {
-            match parse_known_hosts(
-                Path::new(&config.ssh.known_hosts_path),
-                config.parsing.skip_hashed_hosts,
-            ) {
-                Ok(hosts) => {
-                    println!("Loaded {} hosts from known_hosts", hosts.len());
-                    all_hosts.extend(hosts);
-                }
-                Err(e) => {
-                    eprintln!("Failed to parse known_hosts: {}", e);
+            let known_hosts_path = Path::new(&config.ssh.known_hosts_path);
+            if !known_hosts_path.exists() {
+                Logger::warn(&format!("known_hosts file '{}' not found. Skipping known_hosts parsing.", config.ssh.known_hosts_path));
+                Logger::warn(&format!("  To fix: Create the file with 'touch {}' or disable with 'parse_known_hosts = false' in config", config.ssh.known_hosts_path));
+            } else {
+                Logger::debug(&format!("Parsing known_hosts file: {}", config.ssh.known_hosts_path));
+                match parse_known_hosts(known_hosts_path, config.parsing.skip_hashed_hosts) {
+                    Ok(hosts) => {
+                        if hosts.is_empty() {
+                            Logger::info("known_hosts file exists but contains no parseable hosts");
+                        } else {
+                            Logger::info(&format!("Loaded {} hosts from known_hosts", hosts.len()));
+                        }
+                        all_hosts.extend(hosts);
+                    }
+                    Err(e) => {
+                        Logger::error(&format!("Failed to parse known_hosts '{}': {}", config.ssh.known_hosts_path, e));
+                        Logger::warn("  Continuing without known_hosts. Check file format or disable with 'parse_known_hosts = false'");
+                    }
                 }
             }
         }
         
         // Parse SSH config if enabled
         if config.parsing.parse_ssh_config {
-            match parse_ssh_config(
-                Path::new(&config.ssh.config_path),
-                config.parsing.simple_config_parsing,
-            ) {
-                Ok(hosts) => {
-                    println!("Loaded {} hosts from SSH config", hosts.len());
-                    all_hosts.extend(hosts);
-                }
-                Err(e) => {
-                    eprintln!("Failed to parse SSH config: {}", e);
+            let ssh_config_path = Path::new(&config.ssh.config_path);
+            if !ssh_config_path.exists() {
+                Logger::warn(&format!("SSH config file '{}' not found. Skipping SSH config parsing.", config.ssh.config_path));
+                Logger::warn("  To fix: Create a config file or disable with 'parse_ssh_config = false' in config");
+            } else {
+                Logger::debug(&format!("Parsing SSH config file: {}", config.ssh.config_path));
+                match parse_ssh_config(ssh_config_path, config.parsing.simple_config_parsing) {
+                    Ok(hosts) => {
+                        if hosts.is_empty() {
+                            Logger::info("SSH config file exists but contains no Host entries");
+                        } else {
+                            Logger::info(&format!("Loaded {} hosts from SSH config", hosts.len()));
+                        }
+                        all_hosts.extend(hosts);
+                    }
+                    Err(e) => {
+                        Logger::error(&format!("Failed to parse SSH config '{}': {}", config.ssh.config_path, e));
+                        Logger::warn("  Continuing without SSH config. Check file format or disable with 'parse_ssh_config = false'");
+                    }
                 }
             }
         }
@@ -184,12 +225,14 @@ impl TridentApp {
         
         // Fallback to examples if no hosts found
         if all_hosts.is_empty() {
-            println!("No SSH hosts found, using examples");
+            Logger::warn("No SSH hosts found, using examples");
+            Logger::info("To add real hosts: add entries to ~/.ssh/known_hosts or ~/.ssh/config");
             vec![
                 HostEntry::new("example1.com".to_string(), "ssh user@example1.com".to_string()),
                 HostEntry::new("example2.com".to_string(), "ssh user@example2.com".to_string()),
             ]
         } else {
+            Logger::debug(&format!("Total {} unique hosts loaded", all_hosts.len()));
             all_hosts
         }
     }
@@ -211,7 +254,7 @@ impl TridentApp {
             "enter" => {
                 if let Some(host) = self.host_list.get_selected_host() {
                     if let Err(e) = self.launch_host(host) {
-                        eprintln!("Failed to launch host: {}", e);
+                        Logger::error(&format!("Failed to launch host: {}", e));
                     }
                     // Close window after launching
                     cx.quit();
@@ -225,6 +268,11 @@ impl TridentApp {
                 // Accept autocomplete suggestion
                 self.search_input.accept_suggestion();
                 self.update_search();
+                cx.notify();
+            }
+            "r" if event.keystroke.modifiers.platform => {
+                // Reload configuration (Cmd+R)
+                self.reload_config_and_hosts();
                 cx.notify();
             }
             "backspace" => {
@@ -252,7 +300,7 @@ impl TridentApp {
         self.host_list.select_index(host_index);
         if let Some(host) = self.host_list.get_selected_host() {
             if let Err(e) = self.launch_host(host) {
-                eprintln!("Failed to launch host: {}", e);
+                Logger::error(&format!("Failed to launch host: {}", e));
             }
             // Close window after launching
             cx.quit();
@@ -263,7 +311,7 @@ impl TridentApp {
         // Launch the double-clicked host
         if let Some(host) = self.host_list.hosts.get(host_index) {
             if let Err(e) = self.launch_host(host) {
-                eprintln!("Failed to launch host: {}", e);
+                Logger::error(&format!("Failed to launch host: {}", e));
             }
         }
     }
@@ -345,6 +393,62 @@ impl TridentApp {
     
     fn launch_host(&self, host: &HostEntry) -> Result<()> {
         self.terminal_launcher.launch(host)
+    }
+    
+    fn reload_config_and_hosts(&mut self) {
+        #[cfg(test)]
+        {
+            // In tests, just log that reload was called
+            Logger::info("Config reload triggered (test mode)");
+            return;
+        }
+        
+        #[cfg(not(test))]
+        {
+        Logger::info("Reloading configuration and SSH hosts...");
+        
+        // Load new configuration
+        match Self::load_config() {
+            Ok(mut new_config) => {
+                // Expand tilde paths
+                if let Err(e) = new_config.expand_path() {
+                    Logger::error(&format!("Failed to expand config paths during reload: {}", e));
+                    return;
+                }
+                
+                // Validate configuration
+                if let Err(e) = new_config.validate() {
+                    Logger::error(&format!("Invalid configuration during reload: {}", e));
+                    return;
+                }
+                
+                // Update app state with new config
+                self.state.config = new_config.clone();
+                
+                // Update terminal launcher with new config
+                self.terminal_launcher = TerminalLauncher::new(new_config.terminal.clone());
+                
+                // Reload SSH hosts with new config
+                let new_hosts = Self::load_ssh_hosts(&new_config);
+                self.state.hosts = new_hosts.clone();
+                self.state.filtered_hosts = new_hosts.clone();
+                
+                // Update host list and clear current search
+                self.host_list.set_hosts(new_hosts.clone());
+                self.search_input.query.clear();
+                self.search_input.suggestion = None;
+                
+                // Reset search state
+                self.state.search_query.clear();
+                self.update_search();
+                
+                Logger::info("Configuration and SSH hosts reloaded successfully");
+            }
+            Err(e) => {
+                Logger::error(&format!("Failed to reload configuration: {}", e));
+            }
+        }
+        }
     }
 }
 
