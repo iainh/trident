@@ -2,6 +2,24 @@
 name = "trident"
 version = "0.1.0"
 edition = "2024"
+description = "SSH Connection Launcher for macOS"
+license = "MIT"
+
+[package.metadata.bundle]
+name = "Trident"
+identifier = "com.trident.ssh-launcher"
+category = "DeveloperTool"
+short_description = "SSH Connection Launcher"
+long_description = "A macOS menubar application for quickly launching SSH connections with fuzzy search over known hosts"
+icon = ["assets/trident-icon-32.png"]
+version = "0.1.0"
+osx_minimum_system_version = "12.0"
+osx_url_schemes = []
+
+# Additional plist entries for proper menubar app behavior
+[package.metadata.bundle.osx_plist_entries]
+LSUIElement = true
+NSHighResolutionCapable = true
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
