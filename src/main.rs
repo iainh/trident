@@ -3,7 +3,9 @@
 mod app;
 mod config;
 mod fuzzy;
+mod hotkey;
 mod menubar;
+mod objc2_hotkey;
 mod ssh;
 mod ui;
 
@@ -11,12 +13,16 @@ use anyhow::Result;
 use app::AppState;
 use config::Config;
 use gpui::*;
+use hotkey::GlobalHotKeyManager;
+use objc2_hotkey::NativeHotKeyManager;
 use ssh::{HostEntry, TerminalLauncher, parse_known_hosts, parse_ssh_config};
 use std::path::Path;
 use ui::{HostList, SearchInput};
 
 // Define actions for the SSH launcher
 actions!(trident, [ShowLauncher, QuitApp, ToggleLauncher]);
+
+// Global signal removed - now using GPUI actions for single-process operation
 
 // Simple logging utility for troubleshooting
 pub struct Logger;
@@ -589,6 +595,7 @@ fn main() -> Result<()> {
     run_menubar_app()
 }
 
+
 fn run_menubar_app() -> Result<()> {
     Application::new().run(|cx: &mut App| {
         // Configure as background agent app (hide dock icon)
@@ -605,20 +612,106 @@ fn run_menubar_app() -> Result<()> {
             Logger::info("Configured as menubar-only app (dock icon hidden)");
         }
 
+        // Set up global state to track the launcher window
+        cx.set_global(TridentState::new());
+
+        // Different approaches for menubar vs hotkey:
+        // - Menubar: spawns process (traditional separation)  
+        // - Global hotkey: shows window in same process (better UX)
+        
+        // Menubar callback - spawns separate process
+        let menubar_callback = move || {
+            Logger::info("Menubar clicked - spawning SSH launcher process");
+            
+            #[allow(clippy::zombie_processes)]
+            match std::process::Command::new(std::env::current_exe().unwrap())
+                .arg("--launcher")
+                .spawn() {
+                Ok(_child) => {
+                    // Child process launched successfully
+                }
+                Err(e) => {
+                    Logger::error(&format!("Failed to launch SSH launcher: {e}"));
+                }
+            }
+        };
+
+        // Try native hotkey first (objc2-based, single process)
+        let mut native_hotkey_manager = NativeHotKeyManager::new();
+        
+        // For now, fall back to process spawning approach since we can't get app_handle
+        // TODO: Find the correct GPUI 2 API for dispatching actions from callbacks
+        Logger::warn("Using process spawning approach due to GPUI API limitations");
+        
+        // Native hotkey callback - spawn separate process (fallback)
+        let native_hotkey_callback = move || {
+            Logger::info("Native global hotkey triggered - spawning SSH launcher process");
+            
+            #[allow(clippy::zombie_processes)]
+            match std::process::Command::new(std::env::current_exe().unwrap())
+                .arg("--launcher")
+                .spawn() {
+                Ok(_) => {
+                    Logger::info("SSH launcher process spawned successfully");
+                },
+                Err(e) => {
+                    Logger::error(&format!("Failed to spawn SSH launcher process: {e}"));
+                }
+            }
+        };
+        
+        native_hotkey_manager.set_callback(native_hotkey_callback).unwrap_or_else(|e| {
+            Logger::error(&format!("Failed to set native hotkey callback: {e}"));
+        });
+
+        let native_hotkey_success = native_hotkey_manager.register_cmd_shift_s().is_ok();
+        
+        if native_hotkey_success {
+            Logger::info("Native global hotkey registered: Cmd+Shift+S (spawns process - fallback)");
+        } else {
+            Logger::warn("Native hotkey registration failed - falling back to cross-platform approach");
+            
+            // Fallback to cross-platform hotkey (spawns process)
+            let mut fallback_hotkey_manager = GlobalHotKeyManager::new();
+            let fallback_callback = move || {
+                Logger::info("Fallback global hotkey triggered - spawning process");
+                
+                #[allow(clippy::zombie_processes)]
+                match std::process::Command::new(std::env::current_exe().unwrap())
+                    .arg("--launcher")
+                    .spawn() {
+                    Ok(_child) => {
+                        // Child process launched successfully
+                    }
+                    Err(e) => {
+                        Logger::error(&format!("Failed to launch SSH launcher from fallback hotkey: {e}"));
+                    }
+                }
+            };
+            
+            fallback_hotkey_manager.set_callback(fallback_callback).unwrap_or_else(|e| {
+                Logger::error(&format!("Failed to set fallback hotkey callback: {e}"));
+            });
+
+            if let Err(e) = fallback_hotkey_manager.register_cmd_shift_s() {
+                Logger::error(&format!("Failed to register fallback global hotkey: {e}"));
+                Logger::warn("No global hotkey available - use menubar only");
+            } else {
+                Logger::info("Fallback global hotkey registered: Cmd+Shift+S (spawns process)");
+            }
+            
+            // Keep the fallback hotkey manager alive
+            std::mem::forget(fallback_hotkey_manager);
+        }
+
         // Create the native menubar within GPUI context
         let mut menubar = menubar::TridentMenuBar::new();
 
         // Set up the callback for when the menu is clicked
-        menubar.set_click_callback(|| {
-            Logger::info("Menubar item clicked - launching Trident");
-
-            // Use std::process::Command to launch a new instance of the app in launcher mode
-            #[allow(clippy::zombie_processes)]
-            let _child = std::process::Command::new(std::env::current_exe().unwrap())
-                .arg("--launcher")
-                .spawn()
-                .expect("Failed to launch Trident");
-        });
+        menubar.set_click_callback(menubar_callback);
+        
+        // Keep the native hotkey manager alive
+        std::mem::forget(native_hotkey_manager);
 
         // Create the native macOS menubar item
         if let Err(e) = menubar.create_status_item() {
@@ -629,6 +722,7 @@ fn run_menubar_app() -> Result<()> {
         }
 
         Logger::info("Native menubar created! Look for the ψ (trident) icon in your menubar");
+        Logger::info("Press Cmd+Shift+S to open the SSH launcher");
 
         // Keep the menubar alive by forgetting it
         std::mem::forget(menubar);
