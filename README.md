@@ -2,7 +2,7 @@
 
 A fast, modern SSH connection launcher for macOS that provides fuzzy search over your known SSH hosts. Launch terminal connections instantly.
 
-![Trident Screenshot](screenshot.png| width=400)
+![Trident Screenshot](screenshot.png)
 
 ## Features
 
