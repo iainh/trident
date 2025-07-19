@@ -1,11 +1,13 @@
 # Trident SSH Launcher
 
-A fast, modern SSH connection launcher for macOS that provides fuzzy search over your known SSH hosts. Launch terminal connections instantly.
+A native macOS menubar application for launching SSH connections with fuzzy search over your known hosts. Features automatic dark mode support and runs entirely from your menubar.
 
 ![Trident Screenshot](screenshot.png)
 
 ## Features
 
+- **Native Menubar App**: Lives in your menubar for instant access
+- **Automatic Dark Mode**: Icon adapts to system light/dark theme changes
 - **Fuzzy Search**: Quickly find hosts by typing partial names
 - **Terminal Integration**: Works with Ghostty, iTerm2, Alacritty, Kitty, WezTerm, Hyper, and Terminal.app
 - **Auto-Discovery**: Automatically parses your SSH known_hosts and config files
@@ -17,7 +19,7 @@ A fast, modern SSH connection launcher for macOS that provides fuzzy search over
 
 ### Prerequisites
 
-- macOS 10.15 or later
+- macOS 12.0 or later
 - Rust 1.70+ (for building from source)
 
 ### Build from Source
@@ -25,20 +27,41 @@ A fast, modern SSH connection launcher for macOS that provides fuzzy search over
 ```bash
 git clone https://github.com/iainh/trident.git
 cd trident
-cargo build --release
+
+# Install cargo-bundle for creating app bundles
+cargo install cargo-bundle
+
+# Build the macOS app bundle
+./build-app.sh
 ```
 
-The binary will be available at `target/release/trident`.
+The app bundle will be created at `target/release/bundle/osx/Trident.app`.
 
-### Running
+### Installation Options
 
+#### Option 1: Use the App Bundle (Recommended)
 ```bash
-# Run directly
+# Build the app bundle
+./build-app.sh
+
+# Install to Applications folder
+cp -r target/release/bundle/osx/Trident.app /Applications/
+
+# Launch from Applications or Spotlight
+open /Applications/Trident.app
+```
+
+#### Option 2: Run from Command Line (Development)
+```bash
+# Run directly in development mode
 cargo run
 
-# Or run the built binary
+# Or build and run the binary directly
+cargo build --release
 ./target/release/trident
 ```
+
+The app will appear as a trident (ψ) icon in your menubar. Click it to access Trident options, or use the "Open Trident" menu item to launch the SSH connection interface.
 
 ## Configuration
 
@@ -127,7 +150,22 @@ skip_hashed_hosts = true    # Skip hashed entries in known_hosts
 
 ## Usage
 
-1. **Launch**: Run the application
+### Menubar App Mode (Recommended)
+
+1. **Install**: Copy `Trident.app` to your Applications folder
+2. **Launch**: Open Trident from Applications or Spotlight
+3. **Access**: Click the trident (ψ) icon in your menubar
+4. **Open Interface**: Select "Open Trident" from the menu to launch the SSH interface
+5. **Search**: Type to filter your SSH hosts with fuzzy matching
+6. **Navigate**: Use arrow keys to select a host
+7. **Connect**: Press Enter or click to launch the SSH connection
+8. **Close**: Press Escape to close without connecting
+
+The app runs in the background and only appears in your menubar - no dock icon clutter!
+
+### Command Line Mode (Development)
+
+1. **Launch**: Run `cargo run` or `./target/release/trident`
 2. **Search**: Type to filter your SSH hosts with fuzzy matching
 3. **Navigate**: Use arrow keys to select a host
 4. **Connect**: Press Enter or click to launch the SSH connection
