@@ -4,7 +4,7 @@
 #[cfg(target_os = "macos")]
 use objc2::runtime::AnyObject;
 #[cfg(target_os = "macos")]
-use objc2::{ClassType, DeclaredClass, declare_class, msg_send, msg_send_id, mutability};
+use objc2::{define_class, msg_send, MainThreadOnly, ClassType, AnyThread};
 #[cfg(target_os = "macos")]
 use objc2_app_kit::{
     NSApplication, NSImage, NSMenu, NSMenuItem, NSStatusBar, NSStatusItem,
@@ -30,22 +30,17 @@ static GLOBAL_CALLBACK: std::sync::Mutex<Option<Arc<dyn Fn() + Send + Sync>>> =
     std::sync::Mutex::new(None);
 
 #[cfg(target_os = "macos")]
-declare_class!(
-    struct MenuBarDelegate;
+define_class!(
+    // SAFETY:
+    // - The superclass NSObject does not have any subclassing requirements.
+    // - MenuBarDelegate does not implement Drop.
+    #[unsafe(super(NSObject))]
+    #[thread_kind = MainThreadOnly]
+    pub struct MenuBarDelegate;
 
-    unsafe impl ClassType for MenuBarDelegate {
-        type Super = NSObject;
-        type Mutability = mutability::InteriorMutable;
-        const NAME: &'static str = "MenuBarDelegate";
-    }
-
-    impl DeclaredClass for MenuBarDelegate {}
-
-    unsafe impl NSObjectProtocol for MenuBarDelegate {}
-
-
-    unsafe impl MenuBarDelegate {
-        #[method(openTrident:)]
+    // SAFETY: All methods have correct signatures and are properly implemented
+    impl MenuBarDelegate {
+        #[unsafe(method(openTrident:))]
         fn open_trident(&self, _sender: Option<&AnyObject>) {
             println!("[DEBUG] Menu item 'Open Trident' clicked");
             if let Ok(callback_guard) = GLOBAL_CALLBACK.lock() {
@@ -55,7 +50,7 @@ declare_class!(
             }
         }
 
-        #[method(toggleStartAtLogin:)]
+        #[unsafe(method(toggleStartAtLogin:))]
         fn toggle_start_at_login(&self, sender: Option<&AnyObject>) {
             println!("[DEBUG] Menu item 'Start at Login' clicked");
             if let Some(menu_item) = sender {
@@ -74,7 +69,7 @@ declare_class!(
             }
         }
 
-        #[method(quitTrident:)]
+        #[unsafe(method(quitTrident:))]
         fn quit_trident(&self, _sender: Option<&AnyObject>) {
             println!("[DEBUG] Menu item 'Quit Trident' clicked");
             unsafe {
@@ -84,6 +79,8 @@ declare_class!(
         }
     }
 
+    // SAFETY: NSObjectProtocol has no additional safety requirements
+    unsafe impl NSObjectProtocol for MenuBarDelegate {}
 );
 
 #[cfg(target_os = "macos")]
@@ -158,9 +155,9 @@ impl MenuBarDelegate {
 
     fn get_bundle_path() -> Option<String> {
         unsafe {
-            let bundle: objc2::rc::Retained<NSBundle> = msg_send_id![NSBundle::class(), mainBundle];
+            let bundle: objc2::rc::Retained<NSBundle> = msg_send![NSBundle::class(), mainBundle];
             let bundle_path: Option<objc2::rc::Retained<NSString>> =
-                msg_send_id![&bundle, bundlePath];
+                msg_send![&bundle, bundlePath];
 
             bundle_path.map(|path| path.to_string())
         }
@@ -208,14 +205,16 @@ impl TridentMenuBar {
             let icon_image = self.create_template_icon(mtm)?;
 
             // Set the icon on the status item button
-            let button: objc2::rc::Retained<NSObject> = msg_send_id![&status_item, button];
+            let button: objc2::rc::Retained<NSObject> = msg_send![&status_item, button];
             let _: () = msg_send![&button, setImage: &*icon_image];
             let _: () =
                 msg_send![&button, setToolTip: &*NSString::from_str("Trident SSH Launcher")];
 
             // Create the menu delegate
-            let delegate: objc2::rc::Retained<MenuBarDelegate> =
-                msg_send_id![MenuBarDelegate::alloc(), init];
+            let delegate: objc2::rc::Retained<MenuBarDelegate> = {
+                let alloc = MenuBarDelegate::alloc(mtm);
+                objc2::msg_send![alloc, init]
+            };
 
             // Create the context menu
             let menu = NSMenu::new(mtm);

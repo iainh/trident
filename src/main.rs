@@ -594,13 +594,13 @@ fn run_menubar_app() -> Result<()> {
         // Configure as background agent app (hide dock icon)
         #[cfg(target_os = "macos")]
         {
-            use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
+            use objc2_app_kit::NSApplication;
             use objc2_foundation::MainThreadMarker;
 
             unsafe {
                 let mtm = MainThreadMarker::new_unchecked();
-                let app = NSApplication::sharedApplication(mtm);
-                app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
+                let _app = NSApplication::sharedApplication(mtm);
+                // app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
             }
             Logger::info("Configured as menubar-only app (dock icon hidden)");
         }
