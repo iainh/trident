@@ -11,7 +11,9 @@ use app::AppState;
 use gpui::*;
 use gpui::prelude::FluentBuilder;
 use ui::{SearchInput, HostList};
-use ssh::parser::HostEntry;
+use ssh::{HostEntry, TerminalLauncher, parse_known_hosts, parse_ssh_config};
+use config::Config;
+use std::path::Path;
 
 // Zed-like theme colors for dark mode
 struct ZedTheme;
@@ -77,34 +79,118 @@ struct TridentApp {
     state: AppState,
     search_input: SearchInput,
     host_list: HostList,
+    terminal_launcher: TerminalLauncher,
     focus_handle: FocusHandle,
 }
 
 impl TridentApp {
     #[cfg(not(test))]
     fn new(cx: &mut Context<Self>) -> Self {
+        // Load configuration
+        let mut config = Self::load_config().unwrap_or_else(|e| {
+            eprintln!("Failed to load config: {}. Using defaults.", e);
+            Config::default()
+        });
+        
+        // Expand tilde paths
+        if let Err(e) = config.expand_path() {
+            eprintln!("Failed to expand config paths: {}. Using defaults.", e);
+            config = Config::default();
+        }
+        
+        // Validate configuration
+        if let Err(e) = config.validate() {
+            eprintln!("Invalid configuration: {}. Using defaults.", e);
+            config = Config::default();
+        }
+        
+        // Create state with loaded config
         let mut state = AppState::new();
+        state.config = config.clone();
         
-        // Load some example hosts for now
-        let example_hosts = vec![
-            HostEntry::new("server1.example.com".to_string(), "ssh user@server1.example.com".to_string()),
-            HostEntry::new("server2.example.com".to_string(), "ssh user@server2.example.com".to_string()),
-            HostEntry::new("production.company.com".to_string(), "ssh deploy@production.company.com".to_string()),
-            HostEntry::new("staging.company.com".to_string(), "ssh deploy@staging.company.com".to_string()),
-            HostEntry::new("dev.company.com".to_string(), "ssh dev@dev.company.com".to_string()),
-        ];
-        
-        state.hosts = example_hosts.clone();
-        state.filtered_hosts = example_hosts.clone();
+        // Load SSH hosts from files
+        let hosts = Self::load_ssh_hosts(&config);
+        state.hosts = hosts.clone();
+        state.filtered_hosts = hosts.clone();
         
         let mut search_input = SearchInput::new("Search SSH hosts...".to_string());
-        search_input.set_focused(true); // Make it focused by default
+        search_input.set_focused(true);
+        
+        let terminal_launcher = TerminalLauncher::new(config.terminal.clone());
         
         Self {
             state,
             search_input,
-            host_list: HostList::new(example_hosts),
+            host_list: HostList::new(hosts),
+            terminal_launcher,
             focus_handle: cx.focus_handle(),
+        }
+    }
+    
+    #[cfg(not(test))]
+    fn load_config() -> Result<Config> {
+        // Try to load from default config path
+        let config_path = Config::default_config_path()?;
+        
+        if !config_path.exists() {
+            // Create default config file if it doesn't exist
+            Config::save_default_config(&config_path)
+                .map_err(|e| anyhow::anyhow!("Failed to create default configuration file: {}", e))?;
+            println!("Created default configuration at: {}", config_path.display());
+        }
+        
+        Config::load_from_file(&config_path)
+    }
+    
+    #[cfg(not(test))]
+    fn load_ssh_hosts(config: &Config) -> Vec<HostEntry> {
+        let mut all_hosts = Vec::new();
+        
+        // Parse known_hosts if enabled
+        if config.parsing.parse_known_hosts {
+            match parse_known_hosts(
+                Path::new(&config.ssh.known_hosts_path),
+                config.parsing.skip_hashed_hosts,
+            ) {
+                Ok(hosts) => {
+                    println!("Loaded {} hosts from known_hosts", hosts.len());
+                    all_hosts.extend(hosts);
+                }
+                Err(e) => {
+                    eprintln!("Failed to parse known_hosts: {}", e);
+                }
+            }
+        }
+        
+        // Parse SSH config if enabled
+        if config.parsing.parse_ssh_config {
+            match parse_ssh_config(
+                Path::new(&config.ssh.config_path),
+                config.parsing.simple_config_parsing,
+            ) {
+                Ok(hosts) => {
+                    println!("Loaded {} hosts from SSH config", hosts.len());
+                    all_hosts.extend(hosts);
+                }
+                Err(e) => {
+                    eprintln!("Failed to parse SSH config: {}", e);
+                }
+            }
+        }
+        
+        // Remove duplicates and sort
+        all_hosts.sort_by(|a, b| a.name.cmp(&b.name));
+        all_hosts.dedup_by(|a, b| a.name == b.name);
+        
+        // Fallback to examples if no hosts found
+        if all_hosts.is_empty() {
+            println!("No SSH hosts found, using examples");
+            vec![
+                HostEntry::new("example1.com".to_string(), "ssh user@example1.com".to_string()),
+                HostEntry::new("example2.com".to_string(), "ssh user@example2.com".to_string()),
+            ]
+        } else {
+            all_hosts
         }
     }
     
@@ -139,12 +225,12 @@ impl TridentApp {
                 // Accept autocomplete suggestion
                 self.search_input.accept_suggestion();
                 self.update_search();
-                cx.notify();
+                // cx.notify();
             }
             "backspace" => {
                 self.search_input.handle_backspace();
                 self.update_search();
-                cx.notify();
+                // cx.notify();
             }
             text => {
                 // Handle regular character input
@@ -342,15 +428,7 @@ impl TridentApp {
     }
     
     fn launch_host(&self, host: &HostEntry) -> Result<()> {
-        use std::process::Command;
-        
-        // Simple terminal launch for now
-        Command::new("osascript")
-            .arg("-e")
-            .arg(format!("tell app \"Terminal\" to do script \"{}\"", host.connection_string))
-            .spawn()?;
-        
-        Ok(())
+        self.terminal_launcher.launch(host)
     }
 }
 
@@ -372,7 +450,7 @@ impl Render for TridentApp {
             .h_full()
             .pt(px(360.0)) // ~1/3 down from top of screen (1080px / 3)
             .track_focus(&self.focus_handle)
-            .on_key_down(cx.listener(|this, event: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>| {
+            .on_key_down(cx.listener(|this, event: &KeyDownEvent, _window: &mut Window, cx| {
                 this.handle_key_event(event, cx);
             }))
             .child(
