@@ -189,7 +189,6 @@ impl TridentApp {
             .items_center()
             .w_full()
             .h(px(48.0))
-            .px_4()
             .bg(ZedTheme::editor_background())
             .border_b_1()
             .border_color(ZedTheme::border())
