@@ -156,7 +156,48 @@ impl TridentApp {
         }
     }
 
-    #[cfg(not(test))]
+    #[cfg(test)]
+    fn new(cx: &mut Context<Self>) -> Self {
+        use config::{TerminalConfig, SshConfig, ParsingConfig, UiConfig};
+        
+        // Create a minimal test configuration
+        let config = Config {
+            terminal: TerminalConfig {
+                program: "/bin/echo".to_string(),
+                args: vec!["test".to_string()],
+            },
+            ssh: SshConfig {
+                known_hosts_path: "/tmp/test_known_hosts".to_string(),
+                config_path: "/tmp/test_config".to_string(),
+                ssh_binary: "/usr/bin/ssh".to_string(),
+            },
+            parsing: ParsingConfig {
+                parse_known_hosts: false,
+                parse_ssh_config: false,
+                simple_config_parsing: true,
+                skip_hashed_hosts: true,
+            },
+            ui: UiConfig {
+                max_results: 10,
+                case_sensitive: false,
+            },
+        };
+
+        let mut state = AppState::new();
+        state.config = config.clone();
+
+        let search_input = SearchInput::new("Test search...".to_string());
+        let terminal_launcher = TerminalLauncher::new(config.terminal.clone());
+
+        Self {
+            state,
+            search_input,
+            host_list: HostList::new(Vec::new()),
+            terminal_launcher,
+            focus_handle: cx.focus_handle(),
+        }
+    }
+
     fn load_config() -> Result<Config> {
         // Try to load from default config path
         let config_path = Config::default_config_path()?;
@@ -174,7 +215,6 @@ impl TridentApp {
         Config::load_from_file(&config_path)
     }
 
-    #[cfg(not(test))]
     fn load_ssh_hosts(config: &Config) -> Vec<HostEntry> {
         let mut all_hosts = Vec::new();
 
@@ -434,60 +474,56 @@ impl TridentApp {
     }
 
     fn reload_config_and_hosts(&mut self) {
-        #[cfg(test)]
-        {
-            // In tests, just log that reload was called
+        // For tests, just log that reload was called
+        if cfg!(test) {
             Logger::info("Config reload triggered (test mode)");
             return;
         }
 
-        #[cfg(not(test))]
-        {
-            Logger::info("Reloading configuration and SSH hosts...");
+        Logger::info("Reloading configuration and SSH hosts...");
 
-            // Load new configuration
-            match Self::load_config() {
-                Ok(mut new_config) => {
-                    // Expand tilde paths
-                    if let Err(e) = new_config.expand_path() {
-                        Logger::error(&format!(
-                            "Failed to expand config paths during reload: {}",
-                            e
-                        ));
-                        return;
-                    }
-
-                    // Validate configuration
-                    if let Err(e) = new_config.validate() {
-                        Logger::error(&format!("Invalid configuration during reload: {}", e));
-                        return;
-                    }
-
-                    // Update app state with new config
-                    self.state.config = new_config.clone();
-
-                    // Update terminal launcher with new config
-                    self.terminal_launcher = TerminalLauncher::new(new_config.terminal.clone());
-
-                    // Reload SSH hosts with new config
-                    let new_hosts = Self::load_ssh_hosts(&new_config);
-                    self.state.hosts = new_hosts.clone();
-                    self.state.filtered_hosts = new_hosts.clone();
-
-                    // Update host list and clear current search
-                    self.host_list.set_hosts(new_hosts.clone());
-                    self.search_input.query.clear();
-                    self.search_input.suggestion = None;
-
-                    // Reset search state
-                    self.state.search_query.clear();
-                    self.update_search();
-
-                    Logger::info("Configuration and SSH hosts reloaded successfully");
+        // Load new configuration
+        match Self::load_config() {
+            Ok(mut new_config) => {
+                // Expand tilde paths
+                if let Err(e) = new_config.expand_path() {
+                    Logger::error(&format!(
+                        "Failed to expand config paths during reload: {}",
+                        e
+                    ));
+                    return;
                 }
-                Err(e) => {
-                    Logger::error(&format!("Failed to reload configuration: {}", e));
+
+                // Validate configuration
+                if let Err(e) = new_config.validate() {
+                    Logger::error(&format!("Invalid configuration during reload: {}", e));
+                    return;
                 }
+
+                // Update app state with new config
+                self.state.config = new_config.clone();
+
+                // Update terminal launcher with new config
+                self.terminal_launcher = TerminalLauncher::new(new_config.terminal.clone());
+
+                // Reload SSH hosts with new config
+                let new_hosts = Self::load_ssh_hosts(&new_config);
+                self.state.hosts = new_hosts.clone();
+                self.state.filtered_hosts = new_hosts.clone();
+
+                // Update host list and clear current search
+                self.host_list.set_hosts(new_hosts.clone());
+                self.search_input.query.clear();
+                self.search_input.suggestion = None;
+
+                // Reset search state
+                self.state.search_query.clear();
+                self.update_search();
+
+                Logger::info("Configuration and SSH hosts reloaded successfully");
+            }
+            Err(e) => {
+                Logger::error(&format!("Failed to reload configuration: {}", e));
             }
         }
     }
@@ -608,6 +644,7 @@ fn run_menubar_app() -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(test))]
 fn launch_ssh_launcher() -> Result<()> {
     Application::new().run(|cx: &mut App| {
         // Get display bounds for positioning
@@ -639,6 +676,7 @@ fn launch_ssh_launcher() -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(test))]
 fn run_with_window() -> Result<()> {
     Application::new().run(|cx: &mut App| {
         // Create a small menubar window that shows the Trident icon
@@ -704,6 +742,7 @@ impl TridentState {
 
 impl Global for TridentState {}
 
+#[cfg(not(test))]
 fn show_launcher_window(cx: &mut App) {
     // Close existing launcher window if any
     if let Some(state) = cx.try_global::<TridentState>() {
