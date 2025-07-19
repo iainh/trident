@@ -12,6 +12,7 @@ pub struct SearchInput {
     pub query: String,
     pub placeholder: String,
     pub is_focused: bool,
+    pub suggestion: Option<String>,
 }
 
 impl SearchInput {
@@ -20,6 +21,7 @@ impl SearchInput {
             query: String::new(),
             placeholder,
             is_focused: false,
+            suggestion: None,
         }
     }
     
@@ -33,14 +35,28 @@ impl SearchInput {
     
     pub fn handle_input(&mut self, text: &str) {
         self.query.push_str(text);
+        self.suggestion = None; // Clear suggestion when typing
     }
     
     pub fn handle_backspace(&mut self) {
         self.query.pop();
+        self.suggestion = None; // Clear suggestion when deleting
     }
     
     pub fn clear(&mut self) {
         self.query.clear();
+        self.suggestion = None;
+    }
+    
+    pub fn set_suggestion(&mut self, suggestion: Option<String>) {
+        self.suggestion = suggestion;
+    }
+    
+    pub fn accept_suggestion(&mut self) {
+        if let Some(suggestion) = &self.suggestion {
+            self.query = suggestion.clone();
+            self.suggestion = None;
+        }
     }
 }
 
@@ -51,22 +67,10 @@ impl IntoElement for SearchInput {
     fn into_element(self) -> Self::Element {
         use gpui::prelude::FluentBuilder;
         
-        let display_text = if self.query.is_empty() {
-            self.placeholder.clone()
-        } else {
-            self.query.clone()
-        };
-        
-        let text_color = if self.query.is_empty() {
-            rgb(0x666666) // Gray for placeholder
-        } else {
-            rgb(0xffffff) // White for actual text
-        };
-        
         let border_color = if self.is_focused {
-            rgb(0x0066cc) // Blue when focused
+            rgb(0x569cd6) // Zed's accent blue when focused
         } else {
-            rgb(0x444444) // Gray when unfocused
+            rgb(0x3c4043) // Zed's border color when unfocused
         };
         
         div()
@@ -84,18 +88,77 @@ impl IntoElement for SearchInput {
                     .flex()
                     .items_center()
                     .w_full()
-                    .text_color(text_color)
                     .text_size(px(16.0))
-                    .child(display_text)
-                    .when(self.is_focused && !self.query.is_empty(), |this| {
-                        this.child(
-                            div()
-                                .w(px(1.0))
-                                .h(px(20.0))
-                                .bg(rgb(0xffffff))
-                                .ml_1()
-                        )
-                    })
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .relative()
+                            .when(self.query.is_empty() && self.suggestion.is_none(), |this| {
+                                // Show cursor + placeholder when no query and no suggestion
+                                this.child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .when(self.is_focused, |this| {
+                                            // Show cursor first
+                                            this.child(
+                                                div()
+                                                    .w(px(2.0))   // Zed cursor width
+                                                    .h(px(18.0))  // Match text line height
+                                                    .bg(rgb(0xd4d4d4)) // Zed's primary text color
+                                                    .rounded(px(1.0))   // Very subtle rounding
+                                                    .mr_2()      // Right margin instead of left
+                                                    .opacity(1.0) // TODO: animate opacity for blinking
+                                            )
+                                        })
+                                        .child(
+                                            div()
+                                                .text_color(rgb(0x8c8c8c)) // Use Zed's placeholder color
+                                                .child(self.placeholder.clone())
+                                        )
+                                )
+                            })
+                            .when(!self.query.is_empty() || self.suggestion.is_some(), |this| {
+                                // Show query + cursor + suggestion when we have text
+                                this.child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .child(
+                                            div()
+                                                .text_color(rgb(0xffffff))
+                                                .child(self.query.clone())
+                                        )
+                                        .when(self.is_focused && !self.query.is_empty(), |this| {
+                                            // Show Zed-style cursor right after typed text
+                                            this.child(
+                                                div()
+                                                    .w(px(2.0))        // Zed cursor width
+                                                    .h(px(18.0))       // Match text line height
+                                                    .bg(rgb(0xd4d4d4)) // Zed's primary text color
+                                                    .rounded(px(1.0))   // Very subtle rounding like Zed
+                                                    .opacity(1.0)      // Solid when actively typing
+                                                    // TODO: Add blinking animation when GPUI supports it
+                                            )
+                                        })
+                                        .when_some(self.suggestion.as_ref(), |this, suggestion| {
+                                            // Only show suggestion if it extends beyond current query
+                                            if suggestion.len() > self.query.len() && 
+                                               suggestion.to_lowercase().starts_with(&self.query.to_lowercase()) {
+                                                let remaining = &suggestion[self.query.len()..];
+                                                this.child(
+                                                    div()
+                                                        .text_color(rgb(0x666666))
+                                                        .child(remaining.to_string())
+                                                )
+                                            } else {
+                                                this
+                                            }
+                                        })
+                                )
+                            })
+                    )
             )
     }
 }

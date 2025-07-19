@@ -66,6 +66,11 @@ impl ZedTheme {
         // Selected background for list items - blue accent background  
         hsla(207.0/360.0, 0.7, 0.25, 0.2) // Blue with transparency - try different hue format
     }
+    
+    fn cursor() -> Hsla {
+        // Cursor color - same as primary text for consistency
+        rgb(0xd4d4d4).into() // Light gray cursor like Zed
+    }
 }
 
 struct TridentApp {
@@ -92,9 +97,12 @@ impl TridentApp {
         state.hosts = example_hosts.clone();
         state.filtered_hosts = example_hosts.clone();
         
+        let mut search_input = SearchInput::new("Search SSH hosts...".to_string());
+        search_input.set_focused(true); // Make it focused by default
+        
         Self {
             state,
-            search_input: SearchInput::new("Search SSH hosts...".to_string()),
+            search_input,
             host_list: HostList::new(example_hosts),
             focus_handle: cx.focus_handle(),
         }
@@ -126,6 +134,12 @@ impl TridentApp {
             "escape" => {
                 // Close window on escape
                 cx.quit();
+            }
+            "tab" => {
+                // Accept autocomplete suggestion
+                self.search_input.accept_suggestion();
+                self.update_search();
+                cx.notify();
             }
             "backspace" => {
                 self.search_input.handle_backspace();
@@ -169,7 +183,7 @@ impl TridentApp {
     }
     
     #[cfg(not(test))]
-    fn render_search_input(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_search_input(&self, _cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .flex()
             .items_center()
@@ -179,24 +193,7 @@ impl TridentApp {
             .bg(ZedTheme::editor_background())
             .border_b_1()
             .border_color(ZedTheme::border())
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .w_full()
-                    .text_size(px(16.0))
-                    .child(
-                        if self.search_input.query.is_empty() {
-                            div()
-                                .text_color(ZedTheme::text_placeholder())
-                                .child(self.search_input.placeholder.clone())
-                        } else {
-                            div()
-                                .text_color(ZedTheme::text())
-                                .child(self.search_input.query.clone())
-                        }
-                    )
-            )
+            .child(self.search_input.clone())
     }
     
     #[cfg(not(test))]
@@ -288,7 +285,33 @@ impl TridentApp {
         
         // Convert search results to owned hosts
         let filtered_hosts: Vec<HostEntry> = results.into_iter().cloned().collect();
-        self.host_list.set_hosts(filtered_hosts);
+        self.host_list.set_hosts(filtered_hosts.clone());
+        
+        // Find and set autocomplete suggestion
+        let suggestion = self.find_autocomplete_suggestion(&filtered_hosts);
+        self.search_input.set_suggestion(suggestion);
+    }
+    
+    fn find_autocomplete_suggestion(&self, filtered_hosts: &[HostEntry]) -> Option<String> {
+        let query = &self.search_input.query;
+        
+        // Don't suggest if query is empty
+        if query.is_empty() {
+            return None;
+        }
+        
+        // Find the best prefix match from results
+        let query_lower = query.to_lowercase();
+        
+        // Look for exact prefix matches first
+        for host in filtered_hosts {
+            let host_name_lower = host.name.to_lowercase();
+            if host_name_lower.starts_with(&query_lower) && host.name.len() > query.len() {
+                return Some(host.name.clone());
+            }
+        }
+        
+        None
     }
     
     fn launch_host(&self, host: &HostEntry) -> Result<()> {
