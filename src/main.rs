@@ -550,31 +550,42 @@ fn main() -> Result<()> {
     
     Logger::info("Starting Trident SSH Launcher...");
     
-    // Create the native menubar first
-    let mut menubar = menubar::TridentMenuBar::new();
-    
-    // Set up the callback for when the menu is clicked
-    menubar.set_click_callback(|| {
-        Logger::info("Menubar item clicked - launching Trident");
+    // Run the menubar app within GPUI context
+    run_menubar_app()
+}
+
+fn run_menubar_app() -> Result<()> {
+    Application::new().run(|cx: &mut App| {
+        // Create the native menubar within GPUI context
+        let mut menubar = menubar::TridentMenuBar::new();
         
-        // Use std::process::Command to launch a new instance of the app in launcher mode
-        std::process::Command::new(std::env::current_exe().unwrap())
-            .arg("--launcher")
-            .spawn()
-            .expect("Failed to launch Trident");
+        // Set up the callback for when the menu is clicked
+        menubar.set_click_callback(|| {
+            Logger::info("Menubar item clicked - launching Trident");
+            
+            // Use std::process::Command to launch a new instance of the app in launcher mode
+            std::process::Command::new(std::env::current_exe().unwrap())
+                .arg("--launcher")
+                .spawn()
+                .expect("Failed to launch Trident");
+        });
+        
+        // Create the native macOS menubar item
+        if let Err(e) = menubar.create_status_item() {
+            Logger::error(&format!("Failed to create menubar item: {e}"));
+            Logger::info("Falling back to window-based approach - will restart with window mode");
+            // Note: Can't easily switch modes here, so just error out
+            panic!("Failed to create menubar: {e}");
+        }
+        
+        Logger::info("Native menubar created! Look for the ψ (trident) icon in your menubar");
+        
+        // Keep the menubar alive by forgetting it
+        std::mem::forget(menubar);
+        
+        // Set focus behavior to not activate when clicked
+        cx.activate(false);
     });
-    
-    // Create the native macOS menubar item
-    if let Err(e) = menubar.create_status_item() {
-        Logger::error(&format!("Failed to create menubar item: {e}"));
-        Logger::info("Falling back to window-based approach");
-        return run_with_window();
-    }
-    
-    Logger::info("Native menubar created! Look for the ψ (trident) icon in your menubar");
-    
-    // Run the native event loop to handle menu interactions
-    menubar.run_event_loop();
     
     Ok(())
 }

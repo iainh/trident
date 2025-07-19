@@ -9,9 +9,13 @@ toml = "0.8"
 dirs = "5.0"
 anyhow = "1.0"
 gpui = { git = "https://github.com/zed-industries/zed" }
+image = "0.25"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-tao = { version = "0.16", features = ["tray"] }
+objc2 = "0.5"
+objc2-app-kit = { version = "0.2", features = ["NSStatusBar", "NSStatusItem", "NSImage", "NSMenu", "NSMenuItem", "NSApplication", "NSEvent", "all"] }
+objc2-foundation = { version = "0.2", features = ["NSData", "NSString"] }
+block2 = "0.5"
 
 [dev-dependencies]
 tempfile = "3.0"

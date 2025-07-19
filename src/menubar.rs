@@ -1,31 +1,72 @@
-// ABOUTME: Native macOS menubar integration using tao system tray
-// ABOUTME: Provides proper system menubar icon and menu functionality
+// ABOUTME: Native macOS menubar integration using objc2 and NSStatusItem
+// ABOUTME: Provides proper system menubar icon with automatic dark mode support
 
 #[cfg(target_os = "macos")]
-use tao::{
-    event::{Event, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
-    menu::{ContextMenu, MenuItemAttributes, MenuId},
-    system_tray::{SystemTray, SystemTrayBuilder, Icon},
+use objc2::runtime::{AnyObject, ProtocolObject};
+#[cfg(target_os = "macos")]
+use objc2::{declare_class, msg_send, msg_send_id, mutability, ClassType, DeclaredClass};
+#[cfg(target_os = "macos")]
+use objc2_app_kit::{
+    NSApplication, NSImage, NSMenu, NSMenuItem, NSStatusBar, NSStatusItem,
+    NSVariableStatusItemLength,
 };
-
+#[cfg(target_os = "macos")]
+use objc2_foundation::{NSData, NSObject, NSObjectProtocol, NSString, MainThreadMarker};
 use std::sync::{Arc, Mutex};
+
+// For PNG image loading and processing
+extern crate image;
 
 pub struct TridentMenuBar {
     #[cfg(target_os = "macos")]
-    event_loop: Option<EventLoop<()>>,
-    #[cfg(target_os = "macos")]
-    system_tray: Option<SystemTray>,
+    status_item: Option<objc2::rc::Retained<NSStatusItem>>,
     callback: Arc<Mutex<Option<Box<dyn Fn() + Send + Sync>>>>,
 }
+
+#[cfg(target_os = "macos")]
+static GLOBAL_CALLBACK: std::sync::Mutex<Option<Arc<dyn Fn() + Send + Sync>>> = std::sync::Mutex::new(None);
+
+#[cfg(target_os = "macos")]
+declare_class!(
+    struct MenuBarDelegate;
+
+    unsafe impl ClassType for MenuBarDelegate {
+        type Super = NSObject;
+        type Mutability = mutability::InteriorMutable;
+        const NAME: &'static str = "MenuBarDelegate";
+    }
+
+    impl DeclaredClass for MenuBarDelegate {}
+
+    unsafe impl NSObjectProtocol for MenuBarDelegate {}
+
+    unsafe impl MenuBarDelegate {
+        #[method(openTrident:)]
+        fn open_trident(&self, _sender: Option<&AnyObject>) {
+            println!("[DEBUG] Menu item 'Open Trident' clicked");
+            if let Ok(callback_guard) = GLOBAL_CALLBACK.lock() {
+                if let Some(ref callback) = *callback_guard {
+                    callback();
+                }
+            }
+        }
+
+        #[method(quitTrident:)]
+        fn quit_trident(&self, _sender: Option<&AnyObject>) {
+            println!("[DEBUG] Menu item 'Quit Trident' clicked");
+            unsafe {
+                let app = NSApplication::sharedApplication(MainThreadMarker::new_unchecked());
+                app.terminate(None);
+            }
+        }
+    }
+);
 
 impl TridentMenuBar {
     pub fn new() -> Self {
         Self {
             #[cfg(target_os = "macos")]
-            event_loop: None,
-            #[cfg(target_os = "macos")]
-            system_tray: None,
+            status_item: None,
             callback: Arc::new(Mutex::new(None)),
         }
     }
@@ -34,30 +75,102 @@ impl TridentMenuBar {
     where
         F: Fn() + Send + Sync + 'static,
     {
-        *self.callback.lock().unwrap() = Some(Box::new(callback));
+        let callback_arc = Arc::new(callback);
+        let callback_clone = callback_arc.clone();
+        *self.callback.lock().unwrap() = Some(Box::new(move || callback_clone()));
+        
+        // Also set the global callback for the delegate
+        #[cfg(target_os = "macos")]
+        {
+            if let Ok(mut global_callback) = GLOBAL_CALLBACK.lock() {
+                *global_callback = Some(callback_arc);
+            }
+        }
     }
 
     #[cfg(target_os = "macos")]
     pub fn create_status_item(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let event_loop = EventLoop::new();
-        
-        // Create context menu for the system tray
-        let mut tray_menu = ContextMenu::new();
-        tray_menu.add_item(MenuItemAttributes::new("Open Trident").with_id(MenuId(1)));
-        tray_menu.add_native_item(tao::menu::MenuItem::Separator);
-        tray_menu.add_item(MenuItemAttributes::new("Quit Trident").with_id(MenuId(2)));
+        unsafe {
+            let mtm = MainThreadMarker::new_unchecked();
+            
+            // Get the system status bar
+            let status_bar = NSStatusBar::systemStatusBar();
+            
+            // Create status item with variable length
+            let status_item = status_bar.statusItemWithLength(NSVariableStatusItemLength);
+            
+            // Create the trident icon as an NSImage template
+            let icon_image = self.create_template_icon(mtm)?;
+            
+            // Set the icon on the status item button
+            let button: objc2::rc::Retained<NSObject> = msg_send_id![&status_item, button];
+            let _: () = msg_send![&button, setImage: &*icon_image];
+            let _: () = msg_send![&button, setToolTip: &*NSString::from_str("Trident SSH Launcher")];
+            
+            // Create the menu delegate
+            let delegate: objc2::rc::Retained<MenuBarDelegate> = msg_send_id![MenuBarDelegate::alloc(), init];
+            
+            // Create the context menu
+            let menu = NSMenu::new(mtm);
+            menu.setAutoenablesItems(false);
+            
+            // Create "Open Trident" menu item
+            let open_item = NSMenuItem::new(mtm);
+            open_item.setTitle(&NSString::from_str("Open Trident"));
+            open_item.setTarget(Some(&*delegate));
+            open_item.setAction(Some(objc2::sel!(openTrident:)));
+            open_item.setEnabled(true);
+            menu.addItem(&open_item);
+            
+            // Add separator
+            let separator = NSMenuItem::separatorItem(mtm);
+            menu.addItem(&separator);
+            
+            // Create "Quit Trident" menu item
+            let quit_item = NSMenuItem::new(mtm);
+            quit_item.setTitle(&NSString::from_str("Quit Trident"));
+            quit_item.setTarget(Some(&*delegate));
+            quit_item.setAction(Some(objc2::sel!(quitTrident:)));
+            quit_item.setEnabled(true);
+            menu.addItem(&quit_item);
+            
+            // Set the menu on the status item
+            status_item.setMenu(Some(&menu));
+            
+            // Store the status item and delegate to keep them alive
+            self.status_item = Some(status_item);
+            
+            // Keep the delegate alive by storing it in a static
+            // This is a bit of a hack but necessary to prevent deallocation
+            std::mem::forget(delegate);
+            
+            println!("[INFO] Created native macOS menubar item with NSStatusItem");
+            Ok(())
+        }
+    }
 
-        // Create system tray with trident icon (ψ symbol)
-        let icon_rgba = create_trident_icon();
-        let icon = Icon::from_rgba(icon_rgba, 16, 16)?;
-        let system_tray = SystemTrayBuilder::new(icon, Some(tray_menu))
-            .build(&event_loop)?;
-
-        self.system_tray = Some(system_tray);
-        self.event_loop = Some(event_loop);
-        
-        println!("[INFO] Created native macOS menubar item");
-        Ok(())
+    #[cfg(target_os = "macos")]
+    fn create_template_icon(&self, mtm: MainThreadMarker) -> Result<objc2::rc::Retained<NSImage>, Box<dyn std::error::Error>> {
+        unsafe {
+            // Load the PNG icon from embedded bytes
+            let png_bytes = include_bytes!("../assets/trident-icon-32.png");
+            
+            // Create NSData from the PNG bytes
+            let ns_data = NSData::with_bytes(png_bytes);
+            
+            // Create NSImage from the data
+            let ns_image = NSImage::initWithData(NSImage::alloc(), &ns_data)
+                .ok_or("Failed to create NSImage from PNG data")?;
+            
+            // Set the image as a template image for automatic dark mode support
+            ns_image.setTemplate(true);
+            
+            // Set the size to 16x16 for menubar
+            let size = objc2_foundation::NSSize { width: 16.0, height: 16.0 };
+            ns_image.setSize(size);
+            
+            Ok(ns_image)
+        }
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -68,44 +181,12 @@ impl TridentMenuBar {
 
     #[cfg(target_os = "macos")]
     pub fn run_event_loop(self) {
-        if let Some(event_loop) = self.event_loop {
-            let callback = self.callback.clone();
-            
-            event_loop.run(move |event, _, control_flow| {
-                *control_flow = ControlFlow::Wait;
-
-                match event {
-                    Event::MenuEvent {
-                        menu_id,
-                        origin: tao::menu::MenuType::ContextMenu,
-                        ..
-                    } => {
-                        match menu_id.0 {
-                            1 => {
-                                // Open Trident
-                                if let Ok(callback_guard) = callback.lock() {
-                                    if let Some(ref cb) = *callback_guard {
-                                        cb();
-                                    }
-                                }
-                            }
-                            2 => {
-                                // Quit
-                                *control_flow = ControlFlow::Exit;
-                            }
-                            _ => {}
-                        }
-                    }
-                    Event::WindowEvent {
-                        event: WindowEvent::CloseRequested,
-                        ..
-                    } => {
-                        *control_flow = ControlFlow::Exit;
-                    }
-                    _ => {}
-                }
-            });
-        }
+        // No need to run NSApplication.run() - the menubar item is already created
+        // and will respond to clicks. The main application event loop handles everything.
+        println!("[INFO] Native menubar event handling integrated with main app");
+        
+        // Keep the menubar alive by moving it into a static
+        std::mem::forget(self);
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -119,88 +200,4 @@ impl Default for TridentMenuBar {
     fn default() -> Self {
         Self::new()
     }
-}
-
-// Create a simple trident icon that adapts to system appearance
-fn create_trident_icon() -> Vec<u8> {
-    let mut icon_data = vec![0u8; 16 * 16 * 4]; // 16x16 RGBA
-    
-    // Use system appearance to determine icon color
-    let is_dark_mode = is_dark_mode();
-    let (icon_r, icon_g, icon_b) = if is_dark_mode {
-        (255, 255, 255) // White for dark mode
-    } else {
-        (0, 0, 0) // Black for light mode
-    };
-    
-    // Simple trident pattern - draw vertical line and three prongs at top
-    for y in 0..16 {
-        for x in 0..16 {
-            let idx = (y * 16 + x) * 4;
-            let (r, g, b, a) = if should_draw_trident_pixel(x, y) {
-                (icon_r, icon_g, icon_b, 255) // Colored pixel
-            } else {
-                (0, 0, 0, 0) // Transparent pixel
-            };
-            
-            icon_data[idx] = r;
-            icon_data[idx + 1] = g;
-            icon_data[idx + 2] = b;
-            icon_data[idx + 3] = a;
-        }
-    }
-    
-    icon_data
-}
-
-#[cfg(target_os = "macos")]
-fn is_dark_mode() -> bool {
-    use std::process::Command;
-    
-    // Use macOS defaults command to check system appearance
-    let output = Command::new("defaults")
-        .args(&["read", "-g", "AppleInterfaceStyle"])
-        .output();
-    
-    match output {
-        Ok(result) => {
-            let stdout = String::from_utf8_lossy(&result.stdout);
-            stdout.trim() == "Dark"
-        }
-        Err(_) => false, // Default to light mode if we can't determine
-    }
-}
-
-#[cfg(not(target_os = "macos"))]
-fn is_dark_mode() -> bool {
-    false // Default to light mode on non-macOS platforms
-}
-
-fn should_draw_trident_pixel(x: usize, y: usize) -> bool {
-    // Center vertical line
-    if x == 8 && y >= 4 {
-        return true;
-    }
-    
-    // Left prong
-    if y >= 1 && y <= 3 && x == 6 {
-        return true;
-    }
-    
-    // Center prong  
-    if y >= 1 && y <= 5 && x == 8 {
-        return true;
-    }
-    
-    // Right prong
-    if y >= 1 && y <= 3 && x == 10 {
-        return true;
-    }
-    
-    // Top connections
-    if y == 1 && (x == 7 || x == 9) {
-        return true;
-    }
-    
-    false
 }
