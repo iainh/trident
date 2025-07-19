@@ -365,8 +365,6 @@ impl TridentApp {
             .items_center()
             .w_full()
             .h(px(48.0))
-            .border_b_1()
-            .border_color(ZedTheme::border())
             .child(self.search_input.clone())
     }
 
@@ -385,7 +383,6 @@ impl TridentApp {
         div()
             .flex()
             .flex_col()
-            .bg(ZedTheme::surface_background())
             .child(display_list)
     }
 
@@ -525,9 +522,19 @@ impl Render for TridentApp {
                     .flex_col()
                     .w(px(600.0)) // Fixed width like Zed's command palette
                     .max_h(px(500.0)) // Reasonable max height to prevent overflow
-                    .bg(ZedTheme::elevated_surface_background())
+                    .bg(ZedTheme::elevated_surface_background().alpha(0.75)) // 25% transparency
+                    .border_1()
+                    .border_color(hsla(0.0, 0.0, 1.0, 0.15)) // Subtle white border with 15% opacity
                     .rounded_lg()
                     .overflow_hidden() // This clips content to rounded corners
+                    .shadow(
+                        vec![BoxShadow {
+                            color: hsla(0.0, 0.0, 0.0, 0.3), // Dark shadow with 30% opacity
+                            offset: Point::new(px(0.0), px(8.0)), // Drop shadow downward
+                            blur_radius: px(24.0), // macOS-style blur
+                            spread_radius: px(0.0),
+                        }]
+                    )
                     .p(px(4.0)) // Add padding to prevent content from covering rounded corners
                     .child(self.render_search_input(cx))
                     .child(self.render_host_list_always(cx)),
