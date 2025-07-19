@@ -312,7 +312,7 @@ case_sensitive = false
             DetectedTerminal {
                 name: "Ghostty".to_string(),
                 program: "/Applications/Ghostty.app/Contents/MacOS/ghostty".to_string(),
-                args: vec!["-e".to_string(), "{ssh_command}".to_string()],
+                args: vec!["-e".to_string(), "sh".to_string(), "-c".to_string(), "{ssh_command}".to_string()],
             },
             DetectedTerminal {
                 name: "iTerm2".to_string(),
@@ -374,7 +374,7 @@ case_sensitive = false
     fn generate_terminal_examples(current_terminal: &str) -> String {
         let examples = vec![
             ("Ghostty", r#"# program = "/Applications/Ghostty.app/Contents/MacOS/ghostty"
-# args = ["-e", "{ssh_command}"]"#),
+# args = ["-e", "sh", "-c", "{ssh_command}"]"#),
             ("iTerm2", r#"# program = "/Applications/iTerm.app/Contents/MacOS/iTerm2"
 # args = ["-c", "tell application \"iTerm2\" to create window with default profile command \"{ssh_command}\""]"#),
             ("Terminal.app", r#"# program = "/usr/bin/osascript"
