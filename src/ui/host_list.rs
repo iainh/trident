@@ -1,11 +1,11 @@
 // ABOUTME: Host list display component for showing SSH host search results
 // ABOUTME: Renders scrollable list of hosts with highlighting for selected item
 
-#[cfg(not(test))]
-use gpui::*;
+use crate::ssh::parser::HostEntry;
 #[cfg(not(test))]
 use gpui::prelude::*;
-use crate::ssh::parser::HostEntry;
+#[cfg(not(test))]
+use gpui::*;
 
 #[derive(Clone)]
 pub struct HostList {
@@ -20,22 +20,26 @@ impl HostList {
             selected_index: 0,
         }
     }
-    
+
     pub fn set_hosts(&mut self, hosts: Vec<HostEntry>) {
         self.hosts = hosts;
         // Reset selection if it's out of bounds
         if self.selected_index >= self.hosts.len() {
-            self.selected_index = if self.hosts.is_empty() { 0 } else { self.hosts.len() - 1 };
+            self.selected_index = if self.hosts.is_empty() {
+                0
+            } else {
+                self.hosts.len() - 1
+            };
         }
     }
-    
+
     pub fn select_next(&mut self) {
         if !self.hosts.is_empty() {
             let max_visible = 8.min(self.hosts.len());
             self.selected_index = (self.selected_index + 1) % max_visible;
         }
     }
-    
+
     pub fn select_previous(&mut self) {
         if !self.hosts.is_empty() {
             let max_visible = 8.min(self.hosts.len());
@@ -46,17 +50,17 @@ impl HostList {
             };
         }
     }
-    
+
     pub fn get_selected_host(&self) -> Option<&HostEntry> {
         self.hosts.get(self.selected_index)
     }
-    
+
     pub fn select_index(&mut self, index: usize) {
         if index < self.hosts.len() {
             self.selected_index = index;
         }
     }
-    
+
     pub fn is_empty(&self) -> bool {
         self.hosts.is_empty()
     }
@@ -65,7 +69,7 @@ impl HostList {
 #[cfg(not(test))]
 impl IntoElement for HostList {
     type Element = Div;
-    
+
     fn into_element(self) -> Self::Element {
         if self.hosts.is_empty() {
             return div()
@@ -79,7 +83,7 @@ impl IntoElement for HostList {
                 .text_size(px(14.0))
                 .child("No hosts found");
         }
-        
+
         // Scrollable list - keyboard navigation will work to keep selected items visible
         div()
             .flex()
@@ -89,45 +93,50 @@ impl IntoElement for HostList {
             .overflow_hidden()
             .bg(rgb(0x252930)) // Zed surface background
             .children(
-                self.hosts.iter().take(8).enumerate().map(|(i, host)| {
-                    let is_selected = i == self.selected_index;
-                    
-                    div()
-                        .flex()
-                        .items_center()
-                        .w_full()
-                        .px_3()
-                        .py_2()
-                        .bg(if is_selected {
-                            hsla(207.0/360.0, 0.7, 0.25, 0.2)
-                        } else {
-                            rgb(0x252930).into()
-                        })
-                        .hover(|style| style.bg(rgb(0x454a55)))
-                        .child(
-                            div()
-                                .flex()
-                                .flex_col()
-                                .gap_1()
-                                .child(
-                                    div()
-                                        .text_color(if is_selected {
-                                            rgb(0x569cd6) // Zed accent text
-                                        } else {
-                                            rgb(0xd4d4d4) // Zed primary text
-                                        })
-                                        .text_size(px(14.0))
-                                        .font_weight(FontWeight::MEDIUM)
-                                        .child(host.name.clone())
-                                )
-                                .child(
-                                    div()
-                                        .text_color(rgb(0xa5a5a5)) // Zed muted text
-                                        .text_size(px(12.0))
-                                        .child(host.connection_string.clone())
-                                )
-                        )
-                }).collect::<Vec<_>>()
+                self.hosts
+                    .iter()
+                    .take(8)
+                    .enumerate()
+                    .map(|(i, host)| {
+                        let is_selected = i == self.selected_index;
+
+                        div()
+                            .flex()
+                            .items_center()
+                            .w_full()
+                            .px_3()
+                            .py_2()
+                            .bg(if is_selected {
+                                hsla(207.0 / 360.0, 0.7, 0.25, 0.2)
+                            } else {
+                                rgb(0x252930).into()
+                            })
+                            .hover(|style| style.bg(rgb(0x454a55)))
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .gap_1()
+                                    .child(
+                                        div()
+                                            .text_color(if is_selected {
+                                                rgb(0x569cd6) // Zed accent text
+                                            } else {
+                                                rgb(0xd4d4d4) // Zed primary text
+                                            })
+                                            .text_size(px(14.0))
+                                            .font_weight(FontWeight::MEDIUM)
+                                            .child(host.name.clone()),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_color(rgb(0xa5a5a5)) // Zed muted text
+                                            .text_size(px(12.0))
+                                            .child(host.connection_string.clone()),
+                                    ),
+                            )
+                    })
+                    .collect::<Vec<_>>(),
             )
     }
 }

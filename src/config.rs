@@ -89,8 +89,9 @@ impl Config {
         let home = dirs::home_dir()
             .map(|h| h.to_string_lossy().to_string())
             .unwrap_or_else(|| "~".to_string());
-        
-        format!(r#"# Trident SSH Launcher Configuration
+
+        format!(
+            r#"# Trident SSH Launcher Configuration
 # Generated automatically with detected terminal: {}
 
 [terminal]
@@ -120,7 +121,7 @@ skip_hashed_hosts = true
 # User interface settings
 max_results = 20
 case_sensitive = false
-"#, 
+"#,
             terminal_config.name,
             terminal_config.program,
             Self::format_args_for_toml(&terminal_config.args),
@@ -129,7 +130,7 @@ case_sensitive = false
             home
         )
     }
-    
+
     pub fn default_config_content() -> &'static str {
         r#"# Trident SSH Launcher Configuration
 
@@ -174,39 +175,40 @@ max_results = 20
 case_sensitive = false
 "#
     }
-    
+
     pub fn load_from_str(content: &str) -> Result<Self> {
         toml::from_str(content).context("Failed to parse configuration")
     }
-    
+
     pub fn load_from_file(path: &Path) -> Result<Self> {
         let content = fs::read_to_string(path)
             .with_context(|| format!("Failed to read configuration file: {}", path.display()))?;
         Self::load_from_str(&content)
     }
-    
+
     pub fn default_config_path() -> Result<PathBuf> {
-        let config_dir = dirs::config_dir()
-            .context("Failed to determine config directory")?;
+        let config_dir = dirs::config_dir().context("Failed to determine config directory")?;
         Ok(config_dir.join("trident").join("config.toml"))
     }
-    
+
     pub fn expand_path(&mut self) -> Result<()> {
         self.ssh.known_hosts_path = expand_tilde(&self.ssh.known_hosts_path)?;
         self.ssh.config_path = expand_tilde(&self.ssh.config_path)?;
         Ok(())
     }
-    
+
     pub fn validate(&self) -> Result<()> {
         self.validate_with_file_checks(true)
     }
-    
+
     pub fn validate_with_file_checks(&self, check_files: bool) -> Result<()> {
         // Validate terminal configuration
         if self.terminal.program.is_empty() {
-            anyhow::bail!("Terminal program cannot be empty. Please specify a valid terminal program path.");
+            anyhow::bail!(
+                "Terminal program cannot be empty. Please specify a valid terminal program path."
+            );
         }
-        
+
         // Check if terminal program exists (only if file checks are enabled)
         if check_files && !Path::new(&self.terminal.program).exists() {
             anyhow::bail!(
@@ -219,9 +221,12 @@ case_sensitive = false
                 self.terminal.program
             );
         }
-        
+
         // Check for {ssh_command} placeholder in args
-        let has_placeholder = self.terminal.args.iter()
+        let has_placeholder = self
+            .terminal
+            .args
+            .iter()
             .any(|arg| arg.contains("{ssh_command}"));
         if !has_placeholder && !self.terminal.args.is_empty() {
             anyhow::bail!(
@@ -231,28 +236,31 @@ case_sensitive = false
                 self.terminal.args
             );
         }
-        
+
         // Validate SSH configuration
         if self.ssh.ssh_binary.is_empty() {
             anyhow::bail!("SSH binary path cannot be empty");
         }
-        
+
         if check_files && !Path::new(&self.ssh.ssh_binary).exists() {
             anyhow::bail!(
                 "SSH binary '{}' does not exist. Please install SSH or specify correct path.",
                 self.ssh.ssh_binary
             );
         }
-        
+
         // Validate UI configuration
         if self.ui.max_results == 0 {
             anyhow::bail!("max_results must be greater than 0. Recommended value: 20");
         }
-        
+
         if self.ui.max_results > 100 {
-            eprintln!("Warning: max_results ({}) is very high, this may impact performance", self.ui.max_results);
+            eprintln!(
+                "Warning: max_results ({}) is very high, this may impact performance",
+                self.ui.max_results
+            );
         }
-        
+
         // Validate parsing configuration
         if !self.parsing.parse_known_hosts && !self.parsing.parse_ssh_config {
             anyhow::bail!(
@@ -260,7 +268,7 @@ case_sensitive = false
                 Set either parse_known_hosts = true or parse_ssh_config = true (or both)"
             );
         }
-        
+
         // Check if SSH files exist when parsing is enabled (only warn, don't fail)
         if check_files {
             if self.parsing.parse_known_hosts && !Path::new(&self.ssh.known_hosts_path).exists() {
@@ -269,7 +277,7 @@ case_sensitive = false
                     self.ssh.known_hosts_path
                 );
             }
-            
+
             if self.parsing.parse_ssh_config && !Path::new(&self.ssh.config_path).exists() {
                 eprintln!(
                     "Warning: SSH config file '{}' does not exist. No hosts will be loaded from SSH config.",
@@ -277,35 +285,37 @@ case_sensitive = false
                 );
             }
         }
-        
+
         Ok(())
     }
-    
+
     pub fn save_default_config(path: &Path) -> Result<()> {
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("Failed to create config directory: {}", parent.display()))?;
+            fs::create_dir_all(parent).with_context(|| {
+                format!("Failed to create config directory: {}", parent.display())
+            })?;
         }
-        
+
         fs::write(path, Self::default_config_content())
             .with_context(|| format!("Failed to write default config to: {}", path.display()))?;
-        
+
         Ok(())
     }
-    
+
     /// Save a generated config with terminal detection
     pub fn save_generated_config(path: &Path) -> Result<()> {
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("Failed to create config directory: {}", parent.display()))?;
+            fs::create_dir_all(parent).with_context(|| {
+                format!("Failed to create config directory: {}", parent.display())
+            })?;
         }
-        
+
         fs::write(path, Self::generate_default_config())
             .with_context(|| format!("Failed to write generated config to: {}", path.display()))?;
-        
+
         Ok(())
     }
-    
+
     /// Detect the best available terminal on the system
     fn detect_best_terminal() -> DetectedTerminal {
         let terminals = vec![
@@ -343,14 +353,14 @@ case_sensitive = false
                 args: vec!["-e".to_string(), "{ssh_command}".to_string()],
             },
         ];
-        
+
         // Check which terminals are installed
         for terminal in terminals {
             if Path::new(&terminal.program).exists() {
                 return terminal;
             }
         }
-        
+
         // Fallback to Terminal.app which should always exist on macOS
         DetectedTerminal {
             name: "Terminal.app".to_string(),
@@ -361,35 +371,58 @@ case_sensitive = false
             ],
         }
     }
-    
+
     /// Format args array for TOML
     fn format_args_for_toml(args: &[String]) -> String {
-        let quoted_args: Vec<String> = args.iter()
+        let quoted_args: Vec<String> = args
+            .iter()
             .map(|arg| format!("\"{}\"", arg.replace('"', "\\\"")))
             .collect();
         format!("[{}]", quoted_args.join(", "))
     }
-    
+
     /// Generate commented examples for other terminals
     fn generate_terminal_examples(current_terminal: &str) -> String {
         let examples = vec![
-            ("Ghostty", r#"# program = "/Applications/Ghostty.app/Contents/MacOS/ghostty"
-# args = ["-e", "sh", "-c", "{ssh_command}"]"#),
-            ("iTerm2", r#"# program = "/Applications/iTerm.app/Contents/MacOS/iTerm2"
-# args = ["-c", "tell application \"iTerm2\" to create window with default profile command \"{ssh_command}\""]"#),
-            ("Terminal.app", r#"# program = "/usr/bin/osascript"
-# args = ["-e", "tell app \"Terminal\" to do script \"{ssh_command}\""]"#),
-            ("Alacritty", r#"# program = "/Applications/Alacritty.app/Contents/MacOS/alacritty"
-# args = ["-e", "sh", "-c", "{ssh_command}"]"#),
-            ("Kitty", r#"# program = "/Applications/kitty.app/Contents/MacOS/kitty"
-# args = ["sh", "-c", "{ssh_command}"]"#),
-            ("WezTerm", r#"# program = "/Applications/WezTerm.app/Contents/MacOS/wezterm"
-# args = ["start", "{ssh_command}"]"#),
-            ("Hyper", r#"# program = "/Applications/Hyper.app/Contents/MacOS/Hyper"
-# args = ["-e", "{ssh_command}"]"#),
+            (
+                "Ghostty",
+                r#"# program = "/Applications/Ghostty.app/Contents/MacOS/ghostty"
+# args = ["-e", "sh", "-c", "{ssh_command}"]"#,
+            ),
+            (
+                "iTerm2",
+                r#"# program = "/Applications/iTerm.app/Contents/MacOS/iTerm2"
+# args = ["-c", "tell application \"iTerm2\" to create window with default profile command \"{ssh_command}\""]"#,
+            ),
+            (
+                "Terminal.app",
+                r#"# program = "/usr/bin/osascript"
+# args = ["-e", "tell app \"Terminal\" to do script \"{ssh_command}\""]"#,
+            ),
+            (
+                "Alacritty",
+                r#"# program = "/Applications/Alacritty.app/Contents/MacOS/alacritty"
+# args = ["-e", "sh", "-c", "{ssh_command}"]"#,
+            ),
+            (
+                "Kitty",
+                r#"# program = "/Applications/kitty.app/Contents/MacOS/kitty"
+# args = ["sh", "-c", "{ssh_command}"]"#,
+            ),
+            (
+                "WezTerm",
+                r#"# program = "/Applications/WezTerm.app/Contents/MacOS/wezterm"
+# args = ["start", "{ssh_command}"]"#,
+            ),
+            (
+                "Hyper",
+                r#"# program = "/Applications/Hyper.app/Contents/MacOS/Hyper"
+# args = ["-e", "{ssh_command}"]"#,
+            ),
         ];
-        
-        examples.iter()
+
+        examples
+            .iter()
             .filter(|(name, _)| *name != current_terminal)
             .map(|(_, config)| *config)
             .collect::<Vec<_>>()
@@ -399,8 +432,7 @@ case_sensitive = false
 
 fn expand_tilde(path: &str) -> Result<String> {
     if path.starts_with("~/") {
-        let home = dirs::home_dir()
-            .context("Failed to determine home directory")?;
+        let home = dirs::home_dir().context("Failed to determine home directory")?;
         Ok(home.join(&path[2..]).to_string_lossy().into_owned())
     } else {
         Ok(path.to_string())
@@ -434,8 +466,11 @@ case_sensitive = false
 "#;
 
         let config = Config::load_from_str(config_str).unwrap();
-        
-        assert_eq!(config.terminal.program, "/Applications/iTerm.app/Contents/MacOS/iTerm2");
+
+        assert_eq!(
+            config.terminal.program,
+            "/Applications/iTerm.app/Contents/MacOS/iTerm2"
+        );
         assert_eq!(config.terminal.args.len(), 0);
         assert_eq!(config.ssh.known_hosts_path, "~/.ssh/known_hosts");
         assert_eq!(config.parsing.parse_known_hosts, true);
@@ -468,9 +503,12 @@ case_sensitive = true
 "#;
 
         let config = Config::load_from_str(config_str).unwrap();
-        
+
         assert_eq!(config.terminal.program, "/usr/bin/osascript");
-        assert_eq!(config.terminal.args, vec!["-e", "tell app \"Terminal\" to do script \"{ssh_command}\""]);
+        assert_eq!(
+            config.terminal.args,
+            vec!["-e", "tell app \"Terminal\" to do script \"{ssh_command}\""]
+        );
         assert_eq!(config.parsing.parse_ssh_config, false);
         assert_eq!(config.parsing.skip_hashed_hosts, false);
         assert_eq!(config.ui.max_results, 50);
@@ -493,7 +531,12 @@ ssh_binary = "/usr/bin/ssh"
         let result = Config::load_from_str(config_str);
         assert!(result.is_err());
         // Our context message should be present
-        assert!(result.unwrap_err().to_string().contains("Failed to parse configuration"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Failed to parse configuration")
+        );
     }
 
     #[test]
@@ -521,17 +564,20 @@ case_sensitive = false
         let result = Config::load_from_str(config_str);
         assert!(result.is_err());
     }
-    
+
     #[test]
     fn test_expand_tilde() {
         let home = dirs::home_dir().unwrap();
         let home_str = home.to_string_lossy();
-        
-        assert_eq!(expand_tilde("~/test").unwrap(), format!("{}/test", home_str));
+
+        assert_eq!(
+            expand_tilde("~/test").unwrap(),
+            format!("{}/test", home_str)
+        );
         assert_eq!(expand_tilde("/absolute/path").unwrap(), "/absolute/path");
         assert_eq!(expand_tilde("relative/path").unwrap(), "relative/path");
     }
-    
+
     #[test]
     fn test_config_expand_paths() {
         let config_str = r#"
@@ -556,73 +602,99 @@ case_sensitive = false
 
         let mut config = Config::load_from_str(config_str).unwrap();
         config.expand_path().unwrap();
-        
+
         let home = dirs::home_dir().unwrap();
-        assert_eq!(config.ssh.known_hosts_path, home.join(".ssh/known_hosts").to_string_lossy());
-        assert_eq!(config.ssh.config_path, home.join(".ssh/config").to_string_lossy());
+        assert_eq!(
+            config.ssh.known_hosts_path,
+            home.join(".ssh/known_hosts").to_string_lossy()
+        );
+        assert_eq!(
+            config.ssh.config_path,
+            home.join(".ssh/config").to_string_lossy()
+        );
         assert_eq!(config.ssh.ssh_binary, "/usr/bin/ssh");
     }
-    
+
     #[test]
     fn test_default_config_path() {
         let path = Config::default_config_path().unwrap();
         assert!(path.to_string_lossy().contains("trident"));
         assert!(path.to_string_lossy().contains("config.toml"));
     }
-    
+
     #[test]
     fn test_validate_empty_terminal_program() {
         let mut config = create_test_config();
         config.terminal.program = "".to_string();
-        
+
         let result = config.validate_with_file_checks(false);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Terminal program cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Terminal program cannot be empty")
+        );
     }
-    
+
     #[test]
     fn test_validate_missing_ssh_command_placeholder() {
         let mut config = create_test_config();
         config.terminal.args = vec!["-e".to_string(), "some command".to_string()];
-        
+
         let result = config.validate_with_file_checks(false);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("{ssh_command} placeholder"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("{ssh_command} placeholder")
+        );
     }
-    
+
     #[test]
     fn test_validate_zero_max_results() {
         let mut config = create_test_config();
         config.ui.max_results = 0;
-        
+
         let result = config.validate_with_file_checks(false);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("max_results must be greater than 0"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("max_results must be greater than 0")
+        );
     }
-    
+
     #[test]
     fn test_validate_no_parsing_sources() {
         let mut config = create_test_config();
         config.parsing.parse_known_hosts = false;
         config.parsing.parse_ssh_config = false;
-        
+
         let result = config.validate_with_file_checks(false);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("At least one parsing source"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("At least one parsing source")
+        );
     }
-    
+
     #[test]
     fn test_validate_valid_config() {
         let config = create_test_config();
         assert!(config.validate_with_file_checks(false).is_ok());
     }
-    
+
     #[test]
     fn test_default_config_is_valid() {
         let config = Config::default();
         assert!(config.validate_with_file_checks(false).is_ok());
     }
-    
+
     #[test]
     fn test_default_config_content_can_be_parsed() {
         let content = Config::default_config_content();
@@ -630,7 +702,7 @@ case_sensitive = false
         assert!(config.validate_with_file_checks(false).is_ok());
         assert_eq!(config, Config::default());
     }
-    
+
     fn create_test_config() -> Config {
         Config {
             terminal: TerminalConfig {
