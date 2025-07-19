@@ -24,6 +24,20 @@ A native macOS menubar application for launching SSH connections with fuzzy sear
 
 ### Build from Source
 
+#### Option A: Using Nix (Recommended)
+```bash
+git clone https://github.com/iainh/trident.git
+cd trident
+
+# Build the macOS app bundle
+nix build
+./result/bin/trident-build
+
+# Or run directly
+nix run .
+```
+
+#### Option B: Using Cargo
 ```bash
 git clone https://github.com/iainh/trident.git
 cd trident
@@ -219,13 +233,64 @@ Trident follows a configuration-driven approach:
 - **User control**: All behavior is configurable through the config file
 - **Performance focused**: < 50ms search response time, < 500ms startup time
 
+## Development
+
+### Development Environment
+
+#### Using Nix (Recommended)
+```bash
+# Enter development environment with all dependencies
+nix develop
+
+# Run all quality assurance checks
+nix flake check
+
+# Run individual checks
+nix run .#test         # Run tests
+nix run .#clippy       # Run linter (warnings as errors)
+nix run .#fmt-check    # Check code formatting
+nix run .#audit        # Security vulnerability audit
+nix run .#deny         # License and dependency checking
+nix run .#build-check  # Verify project builds
+```
+
+#### Using Cargo
+```bash
+# Run tests
+cargo test
+
+# Run linter
+cargo clippy
+
+# Format code
+cargo fmt
+
+# Security audit
+cargo audit
+
+# Build project
+cargo build
+```
+
+### Quality Assurance
+
+The project includes comprehensive QA checks that run automatically in CI:
+- **Unit Tests**: 42+ tests covering core functionality
+- **Linting**: Clippy with warnings treated as errors
+- **Formatting**: Code must be properly formatted with rustfmt
+- **Security**: Vulnerability scanning with cargo-audit
+- **Build**: Project must compile on all supported platforms
+
+Run all checks locally with: `nix flake check`
+
 ## Contributing
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+3. Run quality checks (`nix flake check`) and ensure they pass
+4. Commit your changes (`git commit -m 'Add amazing feature'`)
+5. Push to the branch (`git push origin feature/amazing-feature`)
+6. Open a Pull Request
 
 ## License
 

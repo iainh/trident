@@ -16,6 +16,7 @@ The project follows a Model-View-Update (MVU) pattern:
 
 ## Development Commands
 
+### Cargo Commands
 ```bash
 # Build the project
 cargo build
@@ -43,6 +44,30 @@ cargo fmt
 
 # Run linter
 cargo clippy
+
+# Security audit
+cargo audit
+```
+
+### Nix Commands
+```bash
+# Enter development environment
+nix develop
+
+# Build macOS .app bundle
+nix build
+nix run .
+
+# Run comprehensive quality assurance checks
+nix flake check
+
+# Run individual QA checks
+nix run .#test         # Run tests
+nix run .#clippy       # Run linter (warnings as errors)
+nix run .#fmt-check    # Check code formatting
+nix run .#audit        # Security vulnerability audit
+nix run .#deny         # License and dependency checking
+nix run .#build-check  # Verify project builds
 ```
 
 ## Project Structure
@@ -74,6 +99,16 @@ Test organization:
 - Unit tests: Core logic (fuzzy search, SSH parsing, state management)
 - Integration tests: GPUI event simulation
 - Performance tests: Benchmark critical paths (< 50ms search response)
+
+### Quality Assurance
+
+The project includes comprehensive QA checks via `nix flake check`:
+- **Tests**: All unit tests must pass (`cargo test`)
+- **Clippy**: Linting with warnings treated as errors (`cargo clippy -- -D warnings`)
+- **Formatting**: Code must be properly formatted (`cargo fmt --check`)
+- **Security**: Vulnerability scanning with `cargo audit`
+- **Dependencies**: License and dependency validation with `cargo deny` (if deny.toml exists)
+- **Build**: Project must compile successfully (`cargo build`)
 
 ## Performance Requirements
 

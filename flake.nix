@@ -30,6 +30,8 @@
         buildInputs = with pkgs; [
           rustToolchain
           cargo-bundle
+          cargo-audit
+          cargo-deny
           pkg-config
           openssl
         ] ++ darwinDeps;
@@ -57,9 +59,112 @@
           '';
         };
 
+        # Quality assurance checks
+        trident-tests = pkgs.writeShellApplication {
+          name = "trident-tests";
+          runtimeInputs = buildInputs;
+          text = ''
+            set -e
+            echo "🧪 Running Trident tests..."
+            cargo test --all-features
+            echo "✅ All tests passed!"
+          '';
+        };
+
+        trident-clippy = pkgs.writeShellApplication {
+          name = "trident-clippy";
+          runtimeInputs = buildInputs;
+          text = ''
+            set -e
+            echo "📎 Running Clippy lints..."
+            cargo clippy --all-targets --all-features -- -D warnings
+            echo "✅ Clippy checks passed!"
+          '';
+        };
+
+        trident-fmt-check = pkgs.writeShellApplication {
+          name = "trident-fmt-check";
+          runtimeInputs = buildInputs;
+          text = ''
+            set -e
+            echo "📝 Checking code formatting..."
+            cargo fmt --all -- --check
+            echo "✅ Code formatting is correct!"
+          '';
+        };
+
+        trident-audit = pkgs.writeShellApplication {
+          name = "trident-audit";
+          runtimeInputs = buildInputs;
+          text = ''
+            set -e
+            echo "🔒 Running security audit..."
+            cargo audit
+            echo "✅ Security audit passed!"
+          '';
+        };
+
+        trident-deny = pkgs.writeShellApplication {
+          name = "trident-deny";
+          runtimeInputs = buildInputs;
+          text = ''
+            set -e
+            echo "🚫 Checking licenses and dependencies..."
+            if [ -f "deny.toml" ]; then
+              cargo deny check
+            else
+              echo "⚠️  No deny.toml found, skipping cargo deny check"
+              echo "   Consider adding deny.toml for dependency/license checking"
+            fi
+            echo "✅ Dependency checks completed!"
+          '';
+        };
+
+        trident-build-check = pkgs.writeShellApplication {
+          name = "trident-build-check";
+          runtimeInputs = buildInputs;
+          text = ''
+            set -e
+            echo "🔨 Checking that project builds..."
+            cargo build --all-features
+            echo "✅ Build check passed!"
+          '';
+        };
+
       in
       {
-        packages.default = trident-build;
+        packages = {
+          default = trident-build;
+          
+          # Make individual checks available as packages too
+          test = trident-tests;
+          clippy = trident-clippy;
+          fmt-check = trident-fmt-check;
+          audit = trident-audit;
+          deny = trident-deny;
+          build-check = trident-build-check;
+        };
+        
+        # Quality assurance checks for `nix flake check`
+        checks = {
+          # Run all tests
+          tests = trident-tests;
+          
+          # Lint with clippy (treat warnings as errors)
+          clippy = trident-clippy;
+          
+          # Check code formatting
+          formatting = trident-fmt-check;
+          
+          # Security audit
+          audit = trident-audit;
+          
+          # License and dependency checking
+          deny = trident-deny;
+          
+          # Build verification
+          build = trident-build-check;
+        };
         
         devShells.default = pkgs.mkShell {
           inherit buildInputs;
@@ -82,8 +187,14 @@
             echo "  cargo build          - Build the project"
             echo "  cargo run            - Run the application"
             echo "  cargo test           - Run tests"
+            echo "  cargo clippy         - Run linter"
+            echo "  cargo fmt            - Format code"
+            echo "  cargo audit          - Security audit"
             echo "  ./build-app.sh       - Build macOS .app bundle"
-            echo "  cargo bundle --release - Build app bundle directly"
+            echo ""
+            echo "Nix commands:"
+            echo "  nix build            - Build .app bundle"
+            echo "  nix flake check      - Run all QA checks"
             echo ""
             echo "To build the .app bundle: ./build-app.sh"
             echo "The bundle will be created at: target/release/bundle/osx/Trident.app"
