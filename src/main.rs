@@ -282,106 +282,22 @@ impl TridentApp {
     }
     
     #[cfg(not(test))]
-    fn render_host_list_always(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        // Always show the host list container
+    fn render_host_list_always(&self, _cx: &mut Context<Self>) -> impl IntoElement {
+        // Create a host list with the correct hosts to display
+        let hosts_to_show = if self.search_input.query.is_empty() {
+            self.state.hosts.clone()
+        } else {
+            self.host_list.hosts.clone()
+        };
+        
+        let mut display_list = HostList::new(hosts_to_show);
+        display_list.selected_index = self.host_list.selected_index;
+        
         div()
             .flex()
             .flex_col()
             .bg(ZedTheme::surface_background())
-            .child(self.render_host_list(cx))
-    }
-
-    #[cfg(not(test))]
-    fn render_host_list(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        // Show all hosts (filtered or all) if query is empty, up to max_visible
-        let hosts_to_show = if self.search_input.query.is_empty() {
-            &self.state.hosts
-        } else {
-            &self.host_list.hosts
-        };
-
-        // Calculate visible hosts and their count for dynamic sizing
-        // Limit to a reasonable number that fits well on screen
-        let max_items_to_show = 8; // Show up to 8 items for good UX
-        
-        let hosts_to_render: Vec<_> = hosts_to_show.iter()
-            .take(max_items_to_show)
-            .collect();
-
-        let visible_hosts = hosts_to_render.iter()
-            .enumerate()
-            .map(|(index, host)| {
-                let is_selected = index == self.host_list.selected_index;
-                
-                div()
-                    .flex()
-                    .items_center()
-                    .w_full()
-                    .px_4()
-                    .py_2()
-                    .when(is_selected, |div| {
-                        div.bg(ZedTheme::ghost_element_selected())
-                    })
-                    .when(!is_selected, |div| {
-                        div.hover(|style| style.bg(ZedTheme::ghost_element_hover()))
-                    })
-                    .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, _window, cx| {
-                        this.handle_host_click(index, cx);
-                    }))
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap_1()
-                            .child(
-                                div()
-                                    .text_color(if is_selected {
-                                        ZedTheme::text_accent()
-                                    } else {
-                                        ZedTheme::text()
-                                    })
-                                    .text_size(px(14.0))
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .child(host.name.clone())
-                            )
-                            .child(
-                                div()
-                                    .text_color(ZedTheme::text_muted())
-                                    .text_size(px(12.0))
-                                    .child(host.connection_string.clone())
-                            )
-                    )
-            })
-            .collect::<Vec<_>>();
-        
-        let host_count = hosts_to_render.len();
-        let is_empty = host_count == 0;
-        
-        div()
-            .flex()
-            .flex_col()
-            .w_full()
-            .when(is_empty, |this| {
-                // Show minimal height when no results
-                this.h(px(60.0))  // Fixed height for "no results" message
-                    .bg(ZedTheme::surface_background())
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .h_full()
-                            .text_color(ZedTheme::text_muted())
-                            .text_size(px(14.0))
-                            .child("No hosts found")
-                    )
-            })
-            .when(!is_empty, |this| {
-                // Let GPUI calculate natural height, but constrain maximum height
-                this.max_h(px(400.0)) // Prevent window from getting too tall
-                    .bg(ZedTheme::surface_background())
-                    .children(visible_hosts)
-            })
+            .child(display_list)
     }
     
     fn update_search(&mut self) {

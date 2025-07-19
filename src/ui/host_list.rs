@@ -1,15 +1,16 @@
 // ABOUTME: Host list display component for showing SSH host search results
-// ABOUTME: Renders list of hosts with highlighting for selected item
+// ABOUTME: Renders scrollable list of hosts with highlighting for selected item
 
 #[cfg(not(test))]
 use gpui::*;
+#[cfg(not(test))]
+use gpui::prelude::*;
 use crate::ssh::parser::HostEntry;
 
 #[derive(Clone)]
 pub struct HostList {
     pub hosts: Vec<HostEntry>,
     pub selected_index: usize,
-    pub max_visible: usize,
 }
 
 impl HostList {
@@ -17,7 +18,6 @@ impl HostList {
         Self {
             hosts,
             selected_index: 0,
-            max_visible: 5,
         }
     }
     
@@ -31,14 +31,16 @@ impl HostList {
     
     pub fn select_next(&mut self) {
         if !self.hosts.is_empty() {
-            self.selected_index = (self.selected_index + 1) % self.hosts.len();
+            let max_visible = 8.min(self.hosts.len());
+            self.selected_index = (self.selected_index + 1) % max_visible;
         }
     }
     
     pub fn select_previous(&mut self) {
         if !self.hosts.is_empty() {
+            let max_visible = 8.min(self.hosts.len());
             self.selected_index = if self.selected_index == 0 {
-                self.hosts.len() - 1
+                max_visible - 1
             } else {
                 self.selected_index - 1
             };
@@ -65,77 +67,68 @@ impl IntoElement for HostList {
     type Element = Div;
     
     fn into_element(self) -> Self::Element {
-        let container = div()
+        if self.hosts.is_empty() {
+            return div()
+                .flex()
+                .items_center()
+                .justify_center()
+                .w_full()
+                .h(px(60.0))
+                .bg(rgb(0x252930)) // Zed surface background
+                .text_color(rgb(0x8c8c8c)) // Zed muted text
+                .text_size(px(14.0))
+                .child("No hosts found");
+        }
+        
+        // Scrollable list - keyboard navigation will work to keep selected items visible
+        div()
             .flex()
             .flex_col()
             .w_full()
             .max_h(px(400.0))
-            .overflow_y_hidden()
-            .bg(rgb(0x2d2d2d))
-            .border_1()
-            .border_color(rgb(0x444444))
-            .rounded_md();
-        
-        if self.hosts.is_empty() {
-            return container.child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .p_4()
-                    .text_color(rgb(0x666666))
-                    .text_size(px(14.0))
-                    .child("No hosts found")
-            );
-        }
-        
-        let visible_hosts = self.hosts.iter()
-            .take(self.max_visible)
-            .enumerate()
-            .map(|(index, host)| {
-                let is_selected = index == self.selected_index;
-                let bg_color = if is_selected {
-                    rgb(0x0066cc) // Blue for selected
-                } else {
-                    rgb(0x2d2d2d) // Default background
-                };
-                
-                let text_color = if is_selected {
-                    rgb(0xffffff) // White text for selected
-                } else {
-                    rgb(0xcccccc) // Light gray for unselected
-                };
-                
-                div()
-                    .flex()
-                    .items_center()
-                    .w_full()
-                    .px_3()
-                    .py_2()
-                    .bg(bg_color)
-                    .hover(|style| style.bg(rgb(0x404040)))
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .child(
-                                div()
-                                    .text_color(text_color)
-                                    .text_size(px(14.0))
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .child(host.name.clone())
-                            )
-                            .child(
-                                div()
-                                    .text_color(rgb(0x888888))
-                                    .text_size(px(12.0))
-                                    .child(host.connection_string.clone())
-                            )
-                    )
-            })
-            .collect::<Vec<_>>();
-        
-        container.children(visible_hosts)
+            .overflow_hidden()
+            .bg(rgb(0x252930)) // Zed surface background
+            .children(
+                self.hosts.iter().take(8).enumerate().map(|(i, host)| {
+                    let is_selected = i == self.selected_index;
+                    
+                    div()
+                        .flex()
+                        .items_center()
+                        .w_full()
+                        .px_3()
+                        .py_2()
+                        .bg(if is_selected {
+                            hsla(207.0/360.0, 0.7, 0.25, 0.2)
+                        } else {
+                            rgb(0x252930).into()
+                        })
+                        .hover(|style| style.bg(rgb(0x454a55)))
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap_1()
+                                .child(
+                                    div()
+                                        .text_color(if is_selected {
+                                            rgb(0x569cd6) // Zed accent text
+                                        } else {
+                                            rgb(0xd4d4d4) // Zed primary text
+                                        })
+                                        .text_size(px(14.0))
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .child(host.name.clone())
+                                )
+                                .child(
+                                    div()
+                                        .text_color(rgb(0xa5a5a5)) // Zed muted text
+                                        .text_size(px(12.0))
+                                        .child(host.connection_string.clone())
+                                )
+                        )
+                }).collect::<Vec<_>>()
+            )
     }
 }
 
