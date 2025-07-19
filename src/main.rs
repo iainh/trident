@@ -9,8 +9,64 @@ mod ui;
 use anyhow::Result;
 use app::AppState;
 use gpui::*;
+use gpui::prelude::FluentBuilder;
 use ui::{SearchInput, HostList};
 use ssh::parser::HostEntry;
+
+// Zed-like theme colors for dark mode
+struct ZedTheme;
+
+impl ZedTheme {
+    fn elevated_surface_background() -> Hsla {
+        // Zed's modal/popover background using hex
+        rgb(0x282c34).into() // Dark blue-gray from Zed
+    }
+    
+    fn surface_background() -> Hsla {
+        // List background - slightly darker using hex
+        rgb(0x252930).into() // Darker blue-gray
+    }
+    
+    fn editor_background() -> Hsla {
+        // Search input background - same as surface for seamless look
+        rgb(0x252930).into() 
+    }
+    
+    fn border() -> Hsla {
+        // Subtle borders using hex
+        rgb(0x3c4043).into() // Subtle blue-gray border
+    }
+    
+    fn text() -> Hsla {
+        // Primary text color using hex
+        rgb(0xd4d4d4).into() // Light gray text
+    }
+    
+    fn text_placeholder() -> Hsla {
+        // Placeholder text using hex
+        rgb(0x8c8c8c).into() // Medium gray
+    }
+    
+    fn text_muted() -> Hsla {
+        // Secondary text using hex
+        rgb(0xa5a5a5).into() // Lighter gray for secondary text
+    }
+    
+    fn text_accent() -> Hsla {
+        // Accent text for selected items - Zed's blue using hex
+        rgb(0x569cd6).into() // #569cd6
+    }
+    
+    fn ghost_element_hover() -> Hsla {
+        // Hover background for list items - subtle blue-gray using hex  
+        rgb(0x454a55).into() // #454a55
+    }
+    
+    fn ghost_element_selected() -> Hsla {
+        // Selected background for list items - blue accent background  
+        hsla(207.0/360.0, 0.7, 0.25, 0.2) // Blue with transparency - try different hue format
+    }
+}
 
 struct TridentApp {
     state: AppState,
@@ -113,25 +169,31 @@ impl TridentApp {
     }
     
     #[cfg(not(test))]
-    fn render_search_input(&self) -> impl IntoElement {
+    fn render_search_input(&self, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .flex()
             .items_center()
             .w_full()
             .h(px(48.0))
             .px_4()
+            .bg(ZedTheme::editor_background())
+            .border_b_1()
+            .border_color(ZedTheme::border())
             .child(
                 div()
                     .flex()
                     .items_center()
                     .w_full()
-                    .text_color(rgb(0x333333))
-                    .text_size(px(18.0))
+                    .text_size(px(16.0))
                     .child(
                         if self.search_input.query.is_empty() {
-                            self.search_input.placeholder.clone()
+                            div()
+                                .text_color(ZedTheme::text_placeholder())
+                                .child(self.search_input.placeholder.clone())
                         } else {
-                            self.search_input.query.clone()
+                            div()
+                                .text_color(ZedTheme::text())
+                                .child(self.search_input.query.clone())
                         }
                     )
             )
@@ -139,12 +201,11 @@ impl TridentApp {
     
     #[cfg(not(test))]
     fn render_host_list_always(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        // Always show the host list container with a separator
+        // Always show the host list container
         div()
             .flex()
             .flex_col()
-            .border_t_1()
-            .border_color(hsla(0.0, 0.0, 0.0, 0.1))
+            .bg(ZedTheme::surface_background())
             .child(self.render_host_list(cx))
     }
 
@@ -162,17 +223,6 @@ impl TridentApp {
             .enumerate()
             .map(|(index, host)| {
                 let is_selected = index == self.host_list.selected_index;
-                let bg_color = if is_selected {
-                    hsla(0.58, 1.0, 0.5, 0.1) // Light blue for selected (iOS style)
-                } else {
-                    hsla(0.0, 0.0, 1.0, 0.0) // Transparent background
-                };
-                
-                let text_color = if is_selected {
-                    rgb(0x007AFF) // Blue text for selected
-                } else {
-                    rgb(0x333333) // Dark gray for unselected
-                };
                 
                 div()
                     .flex()
@@ -180,8 +230,12 @@ impl TridentApp {
                     .w_full()
                     .px_4()
                     .py_2()
-                    .bg(bg_color)
-                    .hover(|style| style.bg(hsla(0.58, 1.0, 0.5, 0.05)))
+                    .when(is_selected, |div| {
+                        div.bg(ZedTheme::ghost_element_selected())
+                    })
+                    .when(!is_selected, |div| {
+                        div.hover(|style| style.bg(ZedTheme::ghost_element_hover()))
+                    })
                     .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, _window, cx| {
                         this.handle_host_click(index, cx);
                     }))
@@ -192,14 +246,18 @@ impl TridentApp {
                             .gap_1()
                             .child(
                                 div()
-                                    .text_color(text_color)
-                                    .text_size(px(15.0))
+                                    .text_color(if is_selected {
+                                        ZedTheme::text_accent()
+                                    } else {
+                                        ZedTheme::text()
+                                    })
+                                    .text_size(px(14.0))
                                     .font_weight(FontWeight::MEDIUM)
                                     .child(host.name.clone())
                             )
                             .child(
                                 div()
-                                    .text_color(hsla(0.0, 0.0, 0.4, 1.0))
+                                    .text_color(ZedTheme::text_muted())
                                     .text_size(px(12.0))
                                     .child(host.connection_string.clone())
                             )
@@ -212,6 +270,7 @@ impl TridentApp {
             .flex_col()
             .w_full()
             .min_h(px(200.0)) // Consistent minimum height like Zed's command palette
+            .bg(ZedTheme::surface_background())
             .children(visible_hosts)
     }
     
@@ -272,11 +331,13 @@ impl Render for TridentApp {
                     .flex_col()
                     .w(px(600.0)) // Fixed width like Zed's command palette
                     .max_h(px(400.0)) // Max height constraint
-                    .bg(hsla(0.0, 0.0, 1.0, 0.98))
+                    .bg(ZedTheme::elevated_surface_background())
+                    .border_1()
+                    .border_color(ZedTheme::border())
                     .rounded_lg()
-                    .shadow_2xl()
+                    .shadow_lg()
                     .overflow_hidden()
-                    .child(self.render_search_input())
+                    .child(self.render_search_input(cx))
                     .child(self.render_host_list_always(cx))
             )
     }
