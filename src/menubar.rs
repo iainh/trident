@@ -2,7 +2,7 @@
 // ABOUTME: Provides proper system menubar icon with automatic dark mode support
 
 #[cfg(target_os = "macos")]
-use objc2::runtime::{AnyObject, ProtocolObject};
+use objc2::runtime::AnyObject;
 #[cfg(target_os = "macos")]
 use objc2::{declare_class, msg_send, msg_send_id, mutability, ClassType, DeclaredClass};
 #[cfg(target_os = "macos")]
@@ -11,7 +11,7 @@ use objc2_app_kit::{
     NSVariableStatusItemLength,
 };
 #[cfg(target_os = "macos")]
-use objc2_foundation::{NSData, NSObject, NSObjectProtocol, NSString, MainThreadMarker};
+use objc2_foundation::{NSData, NSObject, NSObjectProtocol, NSString, MainThreadMarker, NSBundle};
 use std::sync::{Arc, Mutex};
 
 // For PNG image loading and processing
@@ -51,6 +51,25 @@ declare_class!(
             }
         }
 
+        #[method(toggleStartAtLogin:)]
+        fn toggle_start_at_login(&self, sender: Option<&AnyObject>) {
+            println!("[DEBUG] Menu item 'Start at Login' clicked");
+            if let Some(menu_item) = sender {
+                unsafe {
+                    let current_state: bool = msg_send![menu_item, state];
+                    let new_state = !current_state;
+                    
+                    if new_state {
+                        Self::add_to_login_items();
+                    } else {
+                        Self::remove_from_login_items();
+                    }
+                    
+                    let _: () = msg_send![menu_item, setState: new_state as i64];
+                }
+            }
+        }
+
         #[method(quitTrident:)]
         fn quit_trident(&self, _sender: Option<&AnyObject>) {
             println!("[DEBUG] Menu item 'Quit Trident' clicked");
@@ -60,7 +79,90 @@ declare_class!(
             }
         }
     }
+
 );
+
+#[cfg(target_os = "macos")]
+impl MenuBarDelegate {
+    fn add_to_login_items() {
+        println!("[INFO] Adding Trident to login items...");
+        match Self::call_osascript_add_login_item() {
+            Ok(_) => println!("[INFO] Successfully added Trident to login items"),
+            Err(e) => println!("[WARN] Failed to add to login items: {}", e),
+        }
+    }
+    
+    fn remove_from_login_items() {
+        println!("[INFO] Removing Trident from login items...");
+        match Self::call_osascript_remove_login_item() {
+            Ok(_) => println!("[INFO] Successfully removed Trident from login items"),
+            Err(e) => println!("[WARN] Failed to remove from login items: {}", e),
+        }
+    }
+    
+    fn is_login_item() -> bool {
+        // For simplicity, just return false for now
+        // In a full implementation, we'd check the actual login items
+        false
+    }
+    
+    fn call_osascript_add_login_item() -> Result<(), String> {
+        use std::process::Command;
+        
+        let bundle_path = Self::get_bundle_path().ok_or("Could not get bundle path")?;
+        
+        let script = format!(
+            r#"tell application "System Events"
+                make login item at end with properties {{path:"{}", hidden:false}}
+            end tell"#,
+            bundle_path
+        );
+        
+        let output = Command::new("osascript")
+            .arg("-e")
+            .arg(&script)
+            .output()
+            .map_err(|e| format!("Failed to execute osascript: {}", e))?;
+            
+        if output.status.success() {
+            Ok(())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(format!("osascript failed: {}", stderr))
+        }
+    }
+    
+    fn call_osascript_remove_login_item() -> Result<(), String> {
+        use std::process::Command;
+        
+        let script = r#"tell application "System Events"
+            delete login item "Trident"
+        end tell"#;
+        
+        let output = Command::new("osascript")
+            .arg("-e")
+            .arg(script)
+            .output()
+            .map_err(|e| format!("Failed to execute osascript: {}", e))?;
+            
+        if output.status.success() {
+            Ok(())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(format!("osascript failed: {}", stderr))
+        }
+    }
+    
+    fn get_bundle_path() -> Option<String> {
+        unsafe {
+            let bundle: objc2::rc::Retained<NSBundle> = msg_send_id![NSBundle::class(), mainBundle];
+            let bundle_path: Option<objc2::rc::Retained<NSString>> = 
+                msg_send_id![&bundle, bundlePath];
+            
+            bundle_path.map(|path| path.to_string())
+        }
+    }
+}
 
 impl TridentMenuBar {
     pub fn new() -> Self {
@@ -123,8 +225,25 @@ impl TridentMenuBar {
             menu.addItem(&open_item);
             
             // Add separator
-            let separator = NSMenuItem::separatorItem(mtm);
-            menu.addItem(&separator);
+            let separator1 = NSMenuItem::separatorItem(mtm);
+            menu.addItem(&separator1);
+            
+            // Create "Start at Login" menu item with checkbox
+            let login_item = NSMenuItem::new(mtm);
+            login_item.setTitle(&NSString::from_str("Start at Login"));
+            login_item.setTarget(Some(&*delegate));
+            login_item.setAction(Some(objc2::sel!(toggleStartAtLogin:)));
+            login_item.setEnabled(true);
+            
+            // Set initial checkbox state based on current login item status
+            let is_login_item = MenuBarDelegate::is_login_item();
+            let _: () = msg_send![&login_item, setState: is_login_item as i64];
+            
+            menu.addItem(&login_item);
+            
+            // Add separator
+            let separator2 = NSMenuItem::separatorItem(mtm);
+            menu.addItem(&separator2);
             
             // Create "Quit Trident" menu item
             let quit_item = NSMenuItem::new(mtm);
@@ -150,7 +269,7 @@ impl TridentMenuBar {
     }
 
     #[cfg(target_os = "macos")]
-    fn create_template_icon(&self, mtm: MainThreadMarker) -> Result<objc2::rc::Retained<NSImage>, Box<dyn std::error::Error>> {
+    fn create_template_icon(&self, _mtm: MainThreadMarker) -> Result<objc2::rc::Retained<NSImage>, Box<dyn std::error::Error>> {
         unsafe {
             // Load the PNG icon from embedded bytes
             let png_bytes = include_bytes!("../assets/trident-icon-32.png");
