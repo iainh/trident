@@ -66,7 +66,7 @@ fn calculate_fuzzy_score(target: &str, query: &str, case_sensitive: bool) -> usi
     // Prefix match gets high score
     if target_normalized.starts_with(&query_normalized) {
         // Base score of 900, with bonus for shorter strings
-        let length_bonus = (50 - target.len().min(50)) as usize;
+        let length_bonus = 50 - target.len().min(50);
         let mut score = 900 + length_bonus;
 
         // Bonus if query is followed by a word boundary

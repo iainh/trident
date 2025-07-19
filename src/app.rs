@@ -13,12 +13,16 @@ pub struct AppState {
     pub hosts: Vec<HostEntry>,
     pub search_query: String,
     pub filtered_hosts: Vec<HostEntry>,
+    #[allow(dead_code)]
     pub selected_index: usize,
+    #[allow(dead_code)]
     pub is_loading: bool,
+    #[allow(dead_code)]
     pub error_message: Option<String>,
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum Message {
     LoadConfig(Config),
     UpdateSearchQuery(String),
@@ -44,6 +48,7 @@ impl AppState {
         }
     }
 
+    #[allow(dead_code)]
     pub fn update(&mut self, message: Message) -> Result<()> {
         match message {
             Message::LoadConfig(config) => {
@@ -113,6 +118,7 @@ impl AppState {
         Ok(())
     }
 
+    #[allow(dead_code)]
     fn load_hosts(&mut self) -> Result<Vec<HostEntry>> {
         let mut all_hosts = Vec::new();
 
@@ -143,6 +149,7 @@ impl AppState {
         Ok(all_hosts)
     }
 
+    #[allow(dead_code)]
     fn update_filtered_hosts(&mut self) {
         let search_engine = SearchEngine::new(self.hosts.clone());
         let results = search_engine.search(
@@ -163,10 +170,12 @@ impl AppState {
         }
     }
 
+    #[allow(dead_code)]
     pub fn get_selected_host(&self) -> Option<&HostEntry> {
         self.filtered_hosts.get(self.selected_index)
     }
 
+    #[allow(dead_code)]
     fn launch_host(&self, host: &HostEntry) -> Result<()> {
         use std::process::Command;
 
@@ -187,10 +196,12 @@ impl AppState {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn has_hosts(&self) -> bool {
         !self.filtered_hosts.is_empty()
     }
 
+    #[allow(dead_code)]
     pub fn get_display_hosts(&self) -> &[HostEntry] {
         &self.filtered_hosts
     }

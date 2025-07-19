@@ -23,20 +23,20 @@ pub struct Logger;
 
 impl Logger {
     pub fn info(msg: &str) {
-        println!("[INFO] {}", msg);
+        println!("[INFO] {msg}");
     }
 
     pub fn warn(msg: &str) {
-        eprintln!("[WARN] {}", msg);
+        eprintln!("[WARN] {msg}");
     }
 
     pub fn error(msg: &str) {
-        eprintln!("[ERROR] {}", msg);
+        eprintln!("[ERROR] {msg}");
     }
 
     pub fn debug(msg: &str) {
         if std::env::var("TRIDENT_DEBUG").is_ok() {
-            eprintln!("[DEBUG] {}", msg);
+            eprintln!("[DEBUG] {msg}");
         }
     }
 }
@@ -44,6 +44,7 @@ impl Logger {
 // Zed-like theme colors for dark mode
 struct ZedTheme;
 
+#[allow(dead_code)]
 impl ZedTheme {
     fn elevated_surface_background() -> Hsla {
         // Zed's modal/popover background using hex
@@ -117,19 +118,19 @@ impl TridentApp {
     fn new(cx: &mut Context<Self>) -> Self {
         // Load configuration
         let mut config = Self::load_config().unwrap_or_else(|e| {
-            eprintln!("Failed to load config: {}. Using defaults.", e);
+            eprintln!("Failed to load config: {e}. Using defaults.");
             Config::default()
         });
 
         // Expand tilde paths
         if let Err(e) = config.expand_path() {
-            eprintln!("Failed to expand config paths: {}. Using defaults.", e);
+            eprintln!("Failed to expand config paths: {e}. Using defaults.");
             config = Config::default();
         }
 
         // Validate configuration
         if let Err(e) = config.validate() {
-            eprintln!("Invalid configuration: {}. Using defaults.", e);
+            eprintln!("Invalid configuration: {e}. Using defaults.");
             config = Config::default();
         }
 
@@ -158,8 +159,8 @@ impl TridentApp {
 
     #[cfg(test)]
     fn new(cx: &mut Context<Self>) -> Self {
-        use config::{TerminalConfig, SshConfig, ParsingConfig, UiConfig};
-        
+        use config::{ParsingConfig, SshConfig, TerminalConfig, UiConfig};
+
         // Create a minimal test configuration
         let config = Config {
             terminal: TerminalConfig {
@@ -336,7 +337,7 @@ impl TridentApp {
             "enter" => {
                 if let Some(host) = self.host_list.get_selected_host() {
                     if let Err(e) = self.launch_host(host) {
-                        Logger::error(&format!("Failed to launch host: {}", e));
+                        Logger::error(&format!("Failed to launch host: {e}"));
                     }
                     // Close window after launching
                     cx.quit();
@@ -377,23 +378,25 @@ impl TridentApp {
         }
     }
 
+    #[allow(dead_code)]
     fn handle_host_click(&mut self, host_index: usize, cx: &mut Context<Self>) {
         // Select and launch the clicked host
         self.host_list.select_index(host_index);
         if let Some(host) = self.host_list.get_selected_host() {
             if let Err(e) = self.launch_host(host) {
-                Logger::error(&format!("Failed to launch host: {}", e));
+                Logger::error(&format!("Failed to launch host: {e}"));
             }
             // Close window after launching
             cx.quit();
         }
     }
 
+    #[allow(dead_code)]
     fn handle_host_double_click(&mut self, host_index: usize, _cx: &mut Context<Self>) {
         // Launch the double-clicked host
         if let Some(host) = self.host_list.hosts.get(host_index) {
             if let Err(e) = self.launch_host(host) {
-                Logger::error(&format!("Failed to launch host: {}", e));
+                Logger::error(&format!("Failed to launch host: {e}"));
             }
         }
     }
@@ -420,10 +423,7 @@ impl TridentApp {
         let mut display_list = HostList::new(hosts_to_show);
         display_list.selected_index = self.host_list.selected_index;
 
-        div()
-            .flex()
-            .flex_col()
-            .child(display_list)
+        div().flex().flex_col().child(display_list)
     }
 
     fn update_search(&mut self) {
@@ -487,16 +487,13 @@ impl TridentApp {
             Ok(mut new_config) => {
                 // Expand tilde paths
                 if let Err(e) = new_config.expand_path() {
-                    Logger::error(&format!(
-                        "Failed to expand config paths during reload: {}",
-                        e
-                    ));
+                    Logger::error(&format!("Failed to expand config paths during reload: {e}"));
                     return;
                 }
 
                 // Validate configuration
                 if let Err(e) = new_config.validate() {
-                    Logger::error(&format!("Invalid configuration during reload: {}", e));
+                    Logger::error(&format!("Invalid configuration during reload: {e}"));
                     return;
                 }
 
@@ -523,7 +520,7 @@ impl TridentApp {
                 Logger::info("Configuration and SSH hosts reloaded successfully");
             }
             Err(e) => {
-                Logger::error(&format!("Failed to reload configuration: {}", e));
+                Logger::error(&format!("Failed to reload configuration: {e}"));
             }
         }
     }
@@ -563,14 +560,12 @@ impl Render for TridentApp {
                     .border_color(hsla(0.0, 0.0, 1.0, 0.15)) // Subtle white border with 15% opacity
                     .rounded_lg()
                     .overflow_hidden() // This clips content to rounded corners
-                    .shadow(
-                        vec![BoxShadow {
-                            color: hsla(0.0, 0.0, 0.0, 0.3), // Dark shadow with 30% opacity
-                            offset: Point::new(px(0.0), px(8.0)), // Drop shadow downward
-                            blur_radius: px(24.0), // macOS-style blur
-                            spread_radius: px(0.0),
-                        }]
-                    )
+                    .shadow(vec![BoxShadow {
+                        color: hsla(0.0, 0.0, 0.0, 0.3),      // Dark shadow with 30% opacity
+                        offset: Point::new(px(0.0), px(8.0)), // Drop shadow downward
+                        blur_radius: px(24.0),                // macOS-style blur
+                        spread_radius: px(0.0),
+                    }])
                     .p(px(4.0)) // Add padding to prevent content from covering rounded corners
                     .child(self.render_search_input(cx))
                     .child(self.render_host_list_always(cx)),
@@ -581,15 +576,15 @@ impl Render for TridentApp {
 #[cfg(not(test))]
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
-    
+
     // Check if we're launched in launcher mode
     if args.len() > 1 && args[1] == "--launcher" {
         Logger::info("Launching Trident window...");
         return launch_ssh_launcher();
     }
-    
+
     Logger::info("Starting Trident SSH Launcher...");
-    
+
     // Run the menubar app within GPUI context
     run_menubar_app()
 }
@@ -601,7 +596,7 @@ fn run_menubar_app() -> Result<()> {
         {
             use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
             use objc2_foundation::MainThreadMarker;
-            
+
             unsafe {
                 let mtm = MainThreadMarker::new_unchecked();
                 let app = NSApplication::sharedApplication(mtm);
@@ -609,21 +604,22 @@ fn run_menubar_app() -> Result<()> {
             }
             Logger::info("Configured as menubar-only app (dock icon hidden)");
         }
-        
+
         // Create the native menubar within GPUI context
         let mut menubar = menubar::TridentMenuBar::new();
-        
+
         // Set up the callback for when the menu is clicked
         menubar.set_click_callback(|| {
             Logger::info("Menubar item clicked - launching Trident");
-            
+
             // Use std::process::Command to launch a new instance of the app in launcher mode
-            std::process::Command::new(std::env::current_exe().unwrap())
+            #[allow(clippy::zombie_processes)]
+            let _child = std::process::Command::new(std::env::current_exe().unwrap())
                 .arg("--launcher")
                 .spawn()
                 .expect("Failed to launch Trident");
         });
-        
+
         // Create the native macOS menubar item
         if let Err(e) = menubar.create_status_item() {
             Logger::error(&format!("Failed to create menubar item: {e}"));
@@ -631,16 +627,16 @@ fn run_menubar_app() -> Result<()> {
             // Note: Can't easily switch modes here, so just error out
             panic!("Failed to create menubar: {e}");
         }
-        
+
         Logger::info("Native menubar created! Look for the ψ (trident) icon in your menubar");
-        
+
         // Keep the menubar alive by forgetting it
         std::mem::forget(menubar);
-        
+
         // Set focus behavior to not activate when clicked
         cx.activate(false);
     });
-    
+
     Ok(())
 }
 
@@ -667,16 +663,17 @@ fn launch_ssh_launcher() -> Result<()> {
                 window_decorations: Some(WindowDecorations::Client),
                 ..Default::default()
             },
-            |_, cx| cx.new(|cx| TridentApp::new(cx)),
+            |_, cx| cx.new(TridentApp::new),
         );
-        
+
         cx.activate(true);
     });
-    
+
     Ok(())
 }
 
 #[cfg(not(test))]
+#[allow(dead_code)]
 fn run_with_window() -> Result<()> {
     Application::new().run(|cx: &mut App| {
         // Create a small menubar window that shows the Trident icon
@@ -707,7 +704,7 @@ fn run_with_window() -> Result<()> {
                 KeyBinding::new("cmd-shift-s", ToggleLauncher, Some("TridentMenuBar")),
                 KeyBinding::new("cmd-q", QuitApp, Some("TridentMenuBar")),
             ]);
-            
+
             // Store the window handle globally so we can manage it
             cx.observe_global::<TridentState>(move |cx| {
                 if let Some(state) = cx.try_global::<TridentState>() {
@@ -718,7 +715,8 @@ fn run_with_window() -> Result<()> {
                         });
                     }
                 }
-            }).detach();
+            })
+            .detach();
         }
 
         cx.set_global(TridentState::new());
@@ -729,11 +727,13 @@ fn run_with_window() -> Result<()> {
 }
 
 #[derive(Default)]
+#[allow(dead_code)]
 struct TridentState {
     should_show_launcher: bool,
     launcher_window: Option<AnyWindowHandle>,
 }
 
+#[allow(dead_code)]
 impl TridentState {
     fn new() -> Self {
         Self::default()
@@ -743,10 +743,11 @@ impl TridentState {
 impl Global for TridentState {}
 
 #[cfg(not(test))]
+#[allow(dead_code)]
 fn show_launcher_window(cx: &mut App) {
     // Close existing launcher window if any
     if let Some(state) = cx.try_global::<TridentState>() {
-        if let Some(handle) = &state.launcher_window {
+        if let Some(_handle) = &state.launcher_window {
             // Just clear the reference - window will close when dropped
             // handle.remove(cx);
         }
@@ -772,7 +773,7 @@ fn show_launcher_window(cx: &mut App) {
             window_decorations: Some(WindowDecorations::Client),
             ..Default::default()
         },
-        |_, cx| cx.new(|cx| TridentApp::new(cx)),
+        |_, cx| cx.new(TridentApp::new),
     );
 
     // Store the window handle
@@ -783,8 +784,10 @@ fn show_launcher_window(cx: &mut App) {
     }
 }
 
+#[allow(dead_code)]
 struct TridentMenuBarWindow;
 
+#[allow(dead_code)]
 impl TridentMenuBarWindow {
     fn new() -> Self {
         Self
@@ -834,22 +837,22 @@ impl Render for TridentMenuBarWindow {
                             .text_color(rgb(0xFFFFFF))
                             .text_size(px(14.0))
                             .font_weight(FontWeight::BOLD)
-                            .child("SSH")
-                    )
+                            .child("SSH"),
+                    ),
             )
             .child(
                 div()
                     .mt(px(10.0))
                     .text_color(rgb(0x666666))
                     .text_size(px(11.0))
-                    .child("Click to open launcher")
+                    .child("Click to open launcher"),
             )
             .child(
                 div()
                     .mt(px(5.0))
                     .text_color(rgb(0x666666))
                     .text_size(px(10.0))
-                    .child("Cmd+Shift+S to toggle")
+                    .child("Cmd+Shift+S to toggle"),
             )
     }
 }

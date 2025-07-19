@@ -55,6 +55,7 @@ impl HostList {
         self.hosts.get(self.selected_index)
     }
 
+    #[allow(dead_code)]
     pub fn select_index(&mut self, index: usize) {
         if index < self.hosts.len() {
             self.selected_index = index;
@@ -104,8 +105,12 @@ impl IntoElement for HostList {
                             .w_full()
                             .px_3()
                             .py_2()
-                            .when(is_selected, |style| style.bg(hsla(207.0 / 360.0, 0.7, 0.25, 0.2)))
-                            .when(!is_selected, |style| style.hover(|hover_style| hover_style.bg(rgb(0x454a55))))
+                            .when(is_selected, |style| {
+                                style.bg(hsla(207.0 / 360.0, 0.7, 0.25, 0.2))
+                            })
+                            .when(!is_selected, |style| {
+                                style.hover(|hover_style| hover_style.bg(rgb(0x454a55)))
+                            })
                             .child(
                                 div()
                                     .flex()

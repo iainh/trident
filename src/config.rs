@@ -131,6 +131,7 @@ case_sensitive = false
         )
     }
 
+    #[allow(dead_code)]
     pub fn default_config_content() -> &'static str {
         r#"# Trident SSH Launcher Configuration
 
@@ -289,6 +290,7 @@ case_sensitive = false
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn save_default_config(path: &Path) -> Result<()> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).with_context(|| {
@@ -431,9 +433,9 @@ case_sensitive = false
 }
 
 fn expand_tilde(path: &str) -> Result<String> {
-    if path.starts_with("~/") {
+    if let Some(stripped) = path.strip_prefix("~/") {
         let home = dirs::home_dir().context("Failed to determine home directory")?;
-        Ok(home.join(&path[2..]).to_string_lossy().into_owned())
+        Ok(home.join(stripped).to_string_lossy().into_owned())
     } else {
         Ok(path.to_string())
     }

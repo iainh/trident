@@ -68,7 +68,7 @@ fn parse_known_hosts_content(content: &str, skip_hashed: bool) -> Vec<HostEntry>
                 if !clean_host.is_empty() && !clean_host.starts_with('|') {
                     entries.push(HostEntry::new(
                         clean_host.to_string(),
-                        format!("ssh {}", clean_host),
+                        format!("ssh {clean_host}"),
                     ));
                 }
             }
@@ -115,7 +115,7 @@ fn parse_ssh_config_content(content: &str, _simple_parsing: bool) -> Vec<HostEnt
                 // Process the previous host if any
                 if let Some(host) = current_host.take() {
                     if !host.contains('*') && !host.contains('?') {
-                        entries.push(HostEntry::new(host.clone(), format!("ssh {}", host)));
+                        entries.push(HostEntry::new(host.clone(), format!("ssh {host}")));
                     }
                 }
 
@@ -131,7 +131,7 @@ fn parse_ssh_config_content(content: &str, _simple_parsing: bool) -> Vec<HostEnt
     // Process the last host
     if let Some(host) = current_host {
         if !host.contains('*') && !host.contains('?') {
-            entries.push(HostEntry::new(host.clone(), format!("ssh {}", host)));
+            entries.push(HostEntry::new(host.clone(), format!("ssh {host}")));
         }
     }
 

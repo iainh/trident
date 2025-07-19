@@ -21,7 +21,7 @@ impl TerminalLauncher {
 
         // Escape the SSH command for safe shell execution
         let escaped_command = escape_shell_command(&host.connection_string);
-        Logger::debug(&format!("Escaped SSH command: {}", escaped_command));
+        Logger::debug(&format!("Escaped SSH command: {escaped_command}"));
 
         // Substitute {ssh_command} placeholder in terminal arguments
         let args: Vec<String> = self
@@ -51,7 +51,7 @@ impl TerminalLauncher {
                     host.name, e
                 ));
                 Logger::error(&format!("  Terminal program: {}", self.config.program));
-                Logger::error(&format!("  Terminal args: {:?}", args));
+                Logger::error(&format!("  Terminal args: {args:?}"));
                 Logger::error(
                     "  Check that the terminal program exists and the configuration is correct",
                 );
