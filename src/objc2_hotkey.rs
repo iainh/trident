@@ -88,17 +88,18 @@ impl NativeHotKeyManager {
                     let expected_modifiers = cmd_flag | shift_flag;
                     
                     if key_code == 1 && modifier_flags.contains(expected_modifiers) {
-                        println!("[DEBUG] Cmd+Shift+S detected via NSEvent monitor");
+                        println!("[DEBUG] objc2_hotkey: Cmd+Shift+S detected via NSEvent monitor");
                         
                         // Trigger the callback on main thread
                         if let Ok(callback_guard) = GLOBAL_HOTKEY_CALLBACK.lock() {
                             if let Some(ref callback) = *callback_guard {
+                                println!("[DEBUG] objc2_hotkey: Executing callback");
                                 callback();
                             }
                         }
                         
-                        // Don't consume the event - let it pass through
-                        // This allows other apps to also handle the key combination if needed
+                        // Note: Global monitors cannot consume events - that's why we get double triggering
+                        // We need to use local monitor for event consumption
                     }
                 }
             });

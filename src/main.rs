@@ -3,7 +3,6 @@
 mod app;
 mod config;
 mod fuzzy;
-mod hotkey;
 mod menubar;
 mod objc2_hotkey;
 mod ssh;
@@ -13,7 +12,7 @@ use anyhow::Result;
 use app::AppState;
 use config::Config;
 use gpui::*;
-use hotkey::GlobalHotKeyManager;
+// Removed fallback hotkey manager - using native objc2 implementation only
 use objc2_hotkey::NativeHotKeyManager;
 use ssh::{HostEntry, TerminalLauncher, parse_known_hosts, parse_ssh_config};
 use std::path::Path;
@@ -638,14 +637,10 @@ fn run_menubar_app() -> Result<()> {
             }
         };
 
-        // Try native hotkey first (objc2-based, single process)
+        // Try native hotkey (objc2-based, single process)
         let mut native_hotkey_manager = NativeHotKeyManager::new();
         
-        // For now, fall back to process spawning approach since we can't get app_handle
-        // TODO: Find the correct GPUI 2 API for dispatching actions from callbacks
-        Logger::warn("Using process spawning approach due to GPUI API limitations");
-        
-        // Native hotkey callback - spawn separate process (fallback)
+        // Native hotkey callback - spawn separate process
         let native_hotkey_callback = move || {
             Logger::info("Native global hotkey triggered - spawning SSH launcher process");
             
@@ -669,41 +664,13 @@ fn run_menubar_app() -> Result<()> {
         let native_hotkey_success = native_hotkey_manager.register_cmd_shift_s().is_ok();
         
         if native_hotkey_success {
-            Logger::info("Native global hotkey registered: Cmd+Shift+S (spawns process - fallback)");
+            Logger::info("✅ Native global hotkey registered: Cmd+Shift+S (objc2-based)");
+            Logger::info("ℹ️  Note: Using native macOS implementation only");
+            // Keep the native hotkey manager alive
+            std::mem::forget(native_hotkey_manager);
         } else {
-            Logger::warn("Native hotkey registration failed - falling back to cross-platform approach");
-            
-            // Fallback to cross-platform hotkey (spawns process)
-            let mut fallback_hotkey_manager = GlobalHotKeyManager::new();
-            let fallback_callback = move || {
-                Logger::info("Fallback global hotkey triggered - spawning process");
-                
-                #[allow(clippy::zombie_processes)]
-                match std::process::Command::new(std::env::current_exe().unwrap())
-                    .arg("--launcher")
-                    .spawn() {
-                    Ok(_child) => {
-                        // Child process launched successfully
-                    }
-                    Err(e) => {
-                        Logger::error(&format!("Failed to launch SSH launcher from fallback hotkey: {e}"));
-                    }
-                }
-            };
-            
-            fallback_hotkey_manager.set_callback(fallback_callback).unwrap_or_else(|e| {
-                Logger::error(&format!("Failed to set fallback hotkey callback: {e}"));
-            });
-
-            if let Err(e) = fallback_hotkey_manager.register_cmd_shift_s() {
-                Logger::error(&format!("Failed to register fallback global hotkey: {e}"));
-                Logger::warn("No global hotkey available - use menubar only");
-            } else {
-                Logger::info("Fallback global hotkey registered: Cmd+Shift+S (spawns process)");
-            }
-            
-            // Keep the fallback hotkey manager alive
-            std::mem::forget(fallback_hotkey_manager);
+            Logger::error("❌ Failed to register native global hotkey");
+            Logger::warn("⚠️  No global hotkey available - use menubar only");
         }
 
         // Create the native menubar within GPUI context
@@ -711,9 +678,6 @@ fn run_menubar_app() -> Result<()> {
 
         // Set up the callback for when the menu is clicked
         menubar.set_click_callback(menubar_callback);
-        
-        // Keep the native hotkey manager alive
-        std::mem::forget(native_hotkey_manager);
 
         // Create the native macOS menubar item
         if let Err(e) = menubar.create_status_item() {

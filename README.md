@@ -77,6 +77,46 @@ cargo build --release
 
 The app will appear as a trident (ψ) icon in your menubar. Click it to access Trident options, or use the "Open Trident" menu item to launch the SSH connection interface.
 
+## Global Hotkey Setup (Cmd+Shift+S)
+
+Trident includes a global hotkey (Cmd+Shift+S) to quickly open the SSH launcher from anywhere on your system. To enable this feature, you need to grant accessibility permissions to Trident.
+
+### Enabling Global Hotkey Access
+
+1. **Launch Trident**: Start the app from Applications or by running it directly
+2. **Permission Prompt**: The first time Trident tries to register the global hotkey, macOS will show a permission dialog
+3. **System Preferences**: If the dialog doesn't appear, manually open:
+   - **macOS Ventura/Sonoma**: System Settings → Privacy & Security → Accessibility
+   - **macOS Monterey and earlier**: System Preferences → Security & Privacy → Privacy → Accessibility
+4. **Add Trident**: Click the "+" button and add Trident.app to the list of allowed applications
+5. **Restart Trident**: Quit and restart Trident for the permissions to take effect
+
+### Verifying Global Hotkey
+
+After granting permissions, you should see this message in the logs:
+```
+✅ Native global hotkey registered: Cmd+Shift+S (objc2-based)
+```
+
+If you see this instead, the hotkey registration failed:
+```
+❌ Failed to register native global hotkey
+⚠️  No global hotkey available - use menubar only
+```
+
+### Troubleshooting Global Hotkey
+
+**Global hotkey not working?**
+
+1. **Check Accessibility Permissions**: Ensure Trident is listed and enabled in System Settings → Privacy & Security → Accessibility
+2. **Conflicting Applications**: Another app might be using Cmd+Shift+S. Try temporarily quitting other apps
+3. **Restart Required**: After changing accessibility permissions, restart Trident completely
+4. **System Integrity Protection**: If you're on an older macOS version, ensure SIP allows accessibility features
+
+**Still not working?**
+
+The menubar interface is always available as a fallback. Click the trident (ψ) icon in your menubar and select "Open Trident" to access the SSH launcher interface.
+
 ## Configuration
 
 Trident automatically creates a configuration file at `~/Library/Application Support/trident/config.toml` on first run, with your terminal auto-detected.
