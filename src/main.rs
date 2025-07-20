@@ -603,11 +603,13 @@ fn run_menubar_app() -> Result<()> {
         {
             use objc2_app_kit::NSApplication;
             use objc2_foundation::MainThreadMarker;
+            use objc2::msg_send;
 
             unsafe {
                 let mtm = MainThreadMarker::new_unchecked();
-                let _app = NSApplication::sharedApplication(mtm);
-                // app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
+                let app = NSApplication::sharedApplication(mtm);
+                // NSApplicationActivationPolicyAccessory = 1
+                let _: () = msg_send![&app, setActivationPolicy: 1i32];
             }
             Logger::info("Configured as menubar-only app (dock icon hidden)");
         }

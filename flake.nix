@@ -45,18 +45,36 @@
             set -e
             echo "🔱 Building Trident.app bundle..."
             
-            if [ ! -f "./build-app.sh" ]; then
-              echo "Error: build-app.sh not found. Please run from the project root."
+            # Build the release bundle with cargo-bundle
+            if ! cargo bundle --release; then
+              echo "Failed to build app bundle"
               exit 1
             fi
             
-            # Build the .app bundle
-            ./build-app.sh
+            APP_PATH="target/release/bundle/osx/Trident.app"
+            PLIST_PATH="$APP_PATH/Contents/Info.plist"
             
-            echo "✅ Build complete! App bundle created at: target/release/bundle/osx/Trident.app"
+            echo "Adding LSUIElement to Info.plist..."
+            
+            # Add LSUIElement if not already present (fixes cargo-bundle v0.7.0 limitation)
+            if ! grep -q "LSUIElement" "$PLIST_PATH"; then
+              # Create temporary file with LSUIElement added
+              awk '/<key>NSHighResolutionCapable<\/key>/ {print "  <key>LSUIElement</key>"; print "  <true/>"; print} !/<key>NSHighResolutionCapable<\/key>/ {print}' "$PLIST_PATH" > "$PLIST_PATH.tmp"
+              mv "$PLIST_PATH.tmp" "$PLIST_PATH"
+              echo "Added LSUIElement to Info.plist"
+            else
+              echo "LSUIElement already present in Info.plist"
+            fi
+            
+            # Make the app executable if needed
+            chmod +x "$APP_PATH/Contents/MacOS/trident"
+            
+            echo "✅ Build complete! App bundle created at: $APP_PATH"
+            echo "App bundle size: $(du -h "$APP_PATH" | cut -f1)"
             echo ""
             echo "To install to Applications folder:"
-            echo "  cp -r target/release/bundle/osx/Trident.app /Applications/"
+            echo "  cp -r $APP_PATH /Applications/"
+            echo "Ready to distribute!"
           '';
         };
 
