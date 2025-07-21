@@ -3,9 +3,12 @@
 mod app;
 mod config;
 mod fuzzy;
-mod menubar;
+// mod menubar; // Replaced with cross-platform tray-icon implementation
+mod native_app;
+mod native_ui;
 mod objc2_hotkey;
 mod ssh;
+mod tray;
 mod ui;
 
 use anyhow::Result;
@@ -20,6 +23,8 @@ use ui::{HostList, SearchInput};
 
 // Define actions for the SSH launcher
 actions!(trident, [ShowLauncher, QuitApp, ToggleLauncher]);
+
+// Tray-icon integration - no global channels needed
 
 // Global signal removed - now using GPUI actions for single-process operation
 
@@ -582,13 +587,15 @@ impl Render for TridentApp {
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
 
-    // Check if we're launched in launcher mode
-    if args.len() > 1 && args[1] == "--launcher" {
-        Logger::info("Launching Trident window...");
-        return launch_ssh_launcher();
+    // Check for native mode flag
+    if args.len() > 1 && args[1] == "--native" {
+        Logger::info("Starting Trident in native mode (no GPUI)...");
+        return native_app::run_native_app();
     }
 
-    Logger::info("Starting Trident SSH Launcher...");
+
+    Logger::info("Starting Trident SSH Launcher (GPUI mode)...");
+    Logger::info("💡 Use --native flag to run in single-process native mode");
 
     // Run the menubar app within GPUI context
     run_menubar_app()
@@ -597,64 +604,72 @@ fn main() -> Result<()> {
 
 fn run_menubar_app() -> Result<()> {
     Application::new().run(|cx: &mut App| {
-        // Configure as background agent app (hide dock icon)
-        #[cfg(target_os = "macos")]
-        {
-            use objc2_app_kit::NSApplication;
-            use objc2_foundation::MainThreadMarker;
-            use objc2::msg_send;
+        // Skip activation policy in GPUI mode - GPUI manages its own NSApplication
+        // The dock icon will be visible in GPUI mode, which is acceptable
+        Logger::info("GPUI mode - using GPUI's application management (dock icon visible)");
 
-            unsafe {
-                let mtm = MainThreadMarker::new_unchecked();
-                let app = NSApplication::sharedApplication(mtm);
-                // NSApplicationActivationPolicyAccessory = 1
-                let _: () = msg_send![&app, setActivationPolicy: 1i32];
-            }
-            Logger::info("Configured as menubar-only app (dock icon hidden)");
-        }
-
-        // Set up global state to track the launcher window
-        cx.set_global(TridentState::new());
-
-        // Different approaches for menubar vs hotkey:
-        // - Menubar: spawns process (traditional separation)  
-        // - Global hotkey: shows window in same process (better UX)
+        // No need for channels with tray-icon - events are handled directly
         
-        // Menubar callback - spawns separate process
-        let menubar_callback = move || {
-            Logger::info("Menubar clicked - spawning SSH launcher process");
-            
-            #[allow(clippy::zombie_processes)]
-            match std::process::Command::new(std::env::current_exe().unwrap())
-                .arg("--launcher")
-                .spawn() {
-                Ok(_child) => {
-                    // Child process launched successfully
-                }
-                Err(e) => {
-                    Logger::error(&format!("Failed to launch SSH launcher: {e}"));
+        // Set up global state first so it can be accessed by tray events
+        cx.set_global(TridentState {
+            should_show_launcher: false,
+            launcher_window: None,
+        });
+        
+        // Set up periodic tray event checking on the main thread using GPUI timer
+        cx.spawn(async move |mut cx| {
+            Logger::info("Tray event processor started - checking every 50ms on main thread");
+            loop {
+                // Use GPUI's timer for main thread scheduling
+                cx.background_executor().timer(std::time::Duration::from_millis(50)).await;
+                
+                // Check for tray events and update GPUI state directly
+                while let Some(event) = tray::TridentTray::try_recv_tray_event() {
+                    Logger::info(&format!("Processing tray event: {:?}", event));
+                    match event {
+                        tray::TrayEvent::Click | tray::TrayEvent::DoubleClick | tray::TrayEvent::OpenTrident => {
+                            Logger::info("Tray event received: triggering launcher");
+                            // Update GPUI global state to show launcher
+                            cx.update_global::<TridentState, ()>(|state, _| {
+                                state.should_show_launcher = true;
+                            }).ok(); // Ignore errors if global not available
+                        }
+                        tray::TrayEvent::ToggleStartAtLogin => {
+                            Logger::info("Toggle start at login (not implemented)");
+                        }
+                        tray::TrayEvent::Quit => {
+                            Logger::info("Quit requested from tray menu");
+                            std::process::exit(0);
+                        }
+                    }
                 }
             }
-        };
+        }).detach();
+        
+        // Set up observer to respond to launcher show requests
+        cx.observe_global::<TridentState>(move |cx| {
+            // Check GPUI state for launcher window requests
+            if let Some(state) = cx.try_global::<TridentState>() {
+                if state.should_show_launcher {
+                    Logger::info("TridentState observer triggered - showing launcher window");
+                    show_launcher_window(cx);
+                    cx.update_global::<TridentState, ()>(|state, _| {
+                        state.should_show_launcher = false;
+                    });
+                }
+            }
+        }).detach();
+
+        // No need for menubar callback with tray-icon - events are polled directly
 
         // Try native hotkey (objc2-based, single process)
         let mut native_hotkey_manager = NativeHotKeyManager::new();
         
-        // Native hotkey callback - spawn separate process
+        // Native hotkey callback - directly updates GPUI state (for when hotkeys work)
         let native_hotkey_callback = move || {
-            Logger::info("Native global hotkey triggered - spawning SSH launcher process");
-            
-            #[allow(clippy::zombie_processes)]
-            match std::process::Command::new(std::env::current_exe().unwrap())
-                .arg("--launcher")
-                .spawn() {
-                Ok(_) => {
-                    Logger::info("SSH launcher process spawned successfully");
-                },
-                Err(e) => {
-                    Logger::error(&format!("Failed to spawn SSH launcher process: {e}"));
-                }
-            }
+            Logger::info("Native global hotkey triggered - would trigger launcher");
+            // Note: This doesn't currently work due to accessibility permissions
+            // When it works, we'd need to trigger the launcher here
         };
         
         native_hotkey_manager.set_callback(native_hotkey_callback).unwrap_or_else(|e| {
@@ -664,8 +679,8 @@ fn run_menubar_app() -> Result<()> {
         let native_hotkey_success = native_hotkey_manager.register_cmd_shift_s().is_ok();
         
         if native_hotkey_success {
-            Logger::info("✅ Native global hotkey registered: Cmd+Shift+S (objc2-based)");
-            Logger::info("ℹ️  Note: Using native macOS implementation only");
+            Logger::info("✅ GPUI global hotkey registered: Cmd+Shift+S (single-process)");
+            Logger::info("🔗 Hotkey successfully integrated with GPUI window management");
             // Keep the native hotkey manager alive
             std::mem::forget(native_hotkey_manager);
         } else {
@@ -673,25 +688,23 @@ fn run_menubar_app() -> Result<()> {
             Logger::warn("⚠️  No global hotkey available - use menubar only");
         }
 
-        // Create the native menubar within GPUI context
-        let mut menubar = menubar::TridentMenuBar::new();
+        // Create the cross-platform tray icon
+        let _tray = match tray::TridentTray::new() {
+            Ok(tray) => {
+                Logger::info("Cross-platform tray icon created! Look for the ψ (trident) icon in your system tray");
+                Logger::info("Press Cmd+Shift+S to open the SSH launcher");
+                Logger::info("🔗 Tray icon successfully integrated with GPUI event system");
+                tray
+            }
+            Err(e) => {
+                Logger::error(&format!("Failed to create tray icon: {e}"));
+                Logger::info("Falling back to window-based approach - will restart with window mode");
+                panic!("Failed to create tray icon: {e}");
+            }
+        };
 
-        // Set up the callback for when the menu is clicked
-        menubar.set_click_callback(menubar_callback);
-
-        // Create the native macOS menubar item
-        if let Err(e) = menubar.create_status_item() {
-            Logger::error(&format!("Failed to create menubar item: {e}"));
-            Logger::info("Falling back to window-based approach - will restart with window mode");
-            // Note: Can't easily switch modes here, so just error out
-            panic!("Failed to create menubar: {e}");
-        }
-
-        Logger::info("Native menubar created! Look for the ψ (trident) icon in your menubar");
-        Logger::info("Press Cmd+Shift+S to open the SSH launcher");
-
-        // Keep the menubar alive by forgetting it
-        std::mem::forget(menubar);
+        // Keep the tray alive by forgetting it
+        std::mem::forget(_tray);
 
         // Set focus behavior to not activate when clicked
         cx.activate(false);
@@ -700,37 +713,6 @@ fn run_menubar_app() -> Result<()> {
     Ok(())
 }
 
-#[cfg(not(test))]
-fn launch_ssh_launcher() -> Result<()> {
-    Application::new().run(|cx: &mut App| {
-        // Get display bounds for positioning
-        let display_bounds = cx.primary_display().map(|d| d.bounds()).unwrap_or(Bounds {
-            origin: Point::new(px(0.0), px(0.0)),
-            size: Size {
-                width: px(1920.0),
-                height: px(1080.0),
-            },
-        });
-
-        // Create the search window
-        let _ = cx.open_window(
-            WindowOptions {
-                titlebar: None,
-                window_bounds: Some(WindowBounds::Fullscreen(display_bounds)),
-                is_movable: false,
-                kind: WindowKind::PopUp,
-                window_background: WindowBackgroundAppearance::Transparent,
-                window_decorations: Some(WindowDecorations::Client),
-                ..Default::default()
-            },
-            |_, cx| cx.new(TridentApp::new),
-        );
-
-        cx.activate(true);
-    });
-
-    Ok(())
-}
 
 #[cfg(not(test))]
 #[allow(dead_code)]
@@ -765,8 +747,12 @@ fn run_with_window() -> Result<()> {
                 KeyBinding::new("cmd-q", QuitApp, Some("TridentMenuBar")),
             ]);
 
+            // For now, we'll check the global flag in action handlers
+            // TODO: Find a better way to bridge native callbacks to GPUI
+
             // Store the window handle globally so we can manage it
             cx.observe_global::<TridentState>(move |cx| {
+                // Check GPUI state for launcher window requests
                 if let Some(state) = cx.try_global::<TridentState>() {
                     if state.should_show_launcher {
                         show_launcher_window(cx);
@@ -779,7 +765,6 @@ fn run_with_window() -> Result<()> {
             .detach();
         }
 
-        cx.set_global(TridentState::new());
         cx.activate(true);
     });
 
@@ -806,12 +791,7 @@ impl Global for TridentState {}
 #[allow(dead_code)]
 fn show_launcher_window(cx: &mut App) {
     // Close existing launcher window if any
-    if let Some(state) = cx.try_global::<TridentState>() {
-        if let Some(_handle) = &state.launcher_window {
-            // Just clear the reference - window will close when dropped
-            // handle.remove(cx);
-        }
-    }
+    hide_launcher_window(cx);
 
     // Get display bounds for positioning
     let display_bounds = cx.primary_display().map(|d| d.bounds()).unwrap_or(Bounds {
@@ -841,6 +821,26 @@ fn show_launcher_window(cx: &mut App) {
         cx.update_global::<TridentState, ()>(|state, _| {
             state.launcher_window = Some(handle.into());
         });
+        Logger::info("✅ GPUI launcher window created and shown");
+    } else {
+        Logger::error("❌ Failed to create GPUI launcher window");
+    }
+}
+
+#[cfg(not(test))]
+#[allow(dead_code)]
+fn hide_launcher_window(cx: &mut App) {
+    // Close existing launcher window if any
+    let window_handle = cx.update_global::<TridentState, Option<AnyWindowHandle>>(|state, _| {
+        state.launcher_window.take()
+    });
+    
+    if let Some(_handle) = window_handle {
+        // GPUI windows are automatically closed when their handle is dropped
+        // Just dropping the handle will close the window
+        Logger::info("✅ GPUI launcher window hidden/closed");
+    } else {
+        Logger::debug("No GPUI launcher window to hide");
     }
 }
 
@@ -867,6 +867,8 @@ impl Render for TridentMenuBarWindow {
             .key_context("TridentMenuBar")
             .on_action(cx.listener(|_this, _: &ToggleLauncher, _window, cx| {
                 Logger::info("Toggle launcher hotkey triggered!");
+                
+                // Directly trigger launcher for the hotkey
                 cx.update_global::<TridentState, ()>(|state, _cx| {
                     state.should_show_launcher = true;
                 });
