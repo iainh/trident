@@ -640,12 +640,21 @@ fn run_menubar_app() -> Result<()> {
                 while let Some(event) = tray::TridentTray::try_recv_tray_event() {
                     Logger::info(&format!("Processing tray event: {event:?}"));
                     match event {
-                        tray::TrayEvent::Click | tray::TrayEvent::DoubleClick | tray::TrayEvent::OpenTrident => {
-                            Logger::info("Tray event received: triggering launcher");
+                        tray::TrayEvent::Click | tray::TrayEvent::DoubleClick => {
+                            Logger::info("Tray icon clicked - context menu should appear");
+                            // Clicks on tray icon should only show the context menu
+                            // The launcher is opened via the "Open Trident" menu item
+                        }
+                        tray::TrayEvent::OpenTrident => {
+                            Logger::info("Open Trident menu item selected - triggering launcher");
                             // Update GPUI global state to show launcher
-                            cx.update_global::<TridentState, ()>(|state, _| {
+                            match cx.update_global::<TridentState, ()>(|state, _| {
+                                Logger::info("Setting should_show_launcher = true in global state");
                                 state.should_show_launcher = true;
-                            }).ok(); // Ignore errors if global not available
+                            }) {
+                                Ok(()) => Logger::info("Successfully updated TridentState global"),
+                                Err(e) => Logger::error(&format!("Failed to update TridentState: {e:?}")),
+                            }
                         }
                         tray::TrayEvent::ToggleStartAtLogin => {
                             Logger::info("Toggle start at login (not implemented)");
