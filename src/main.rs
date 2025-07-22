@@ -595,9 +595,7 @@ static GLOBAL_HOTKEY_TRIGGERED: AtomicBool = AtomicBool::new(false);
 
 fn run_menubar_app() -> Result<()> {
     Application::new().run(|cx: &mut App| {
-        // Skip activation policy in GPUI mode - GPUI manages its own NSApplication
-        // The dock icon will be visible in GPUI mode, which is acceptable
-        Logger::info("GPUI mode - using GPUI's application management (dock icon visible)");
+        Logger::info("GPUI mode - using LSUIElement in Info.plist for dock icon hiding");
 
         // No need for channels with tray-icon - events are handled directly
 
