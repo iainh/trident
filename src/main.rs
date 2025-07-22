@@ -328,7 +328,7 @@ impl TridentApp {
         }
     }
 
-    fn handle_key_event(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
+    fn handle_key_event(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         match event.keystroke.key.as_str() {
             "up" => {
                 if !self.host_list.is_empty() {
@@ -347,13 +347,13 @@ impl TridentApp {
                     if let Err(e) = self.launch_host(host) {
                         Logger::error(&format!("Failed to launch host: {e}"));
                     }
-                    // Close window after launching
-                    cx.quit();
+                    // Close window after launching, but keep app running
+                    self.close_launcher_window(window, cx);
                 }
             }
             "escape" => {
-                // Close window on escape
-                cx.quit();
+                // Close window on escape, but keep app running
+                self.close_launcher_window(window, cx);
             }
             "tab" => {
                 // Accept autocomplete suggestion
@@ -387,15 +387,15 @@ impl TridentApp {
     }
 
     #[allow(dead_code)]
-    fn handle_host_click(&mut self, host_index: usize, cx: &mut Context<Self>) {
+    fn handle_host_click(&mut self, host_index: usize, window: &mut Window, cx: &mut Context<Self>) {
         // Select and launch the clicked host
         self.host_list.select_index(host_index);
         if let Some(host) = self.host_list.get_selected_host() {
             if let Err(e) = self.launch_host(host) {
                 Logger::error(&format!("Failed to launch host: {e}"));
             }
-            // Close window after launching
-            cx.quit();
+            // Close window after launching, but keep app running  
+            self.close_launcher_window(window, cx);
         }
     }
 
@@ -481,6 +481,19 @@ impl TridentApp {
         self.terminal_launcher.launch(host)
     }
 
+    fn close_launcher_window(&self, _window: &mut Window, cx: &mut Context<Self>) {
+        // In current GPUI, use cx.hide() to hide the window instead of dropping handles
+        // This is the correct way to close a specific window without quitting the app
+        cx.hide();
+        
+        // Clear the launcher window from global state
+        cx.update_global::<TridentState, ()>(|state, _| {
+            state.launcher_window = None;
+        });
+        
+        Logger::info("✅ Launcher window hidden, tray icon remains active");
+    }
+
     fn reload_config_and_hosts(&mut self) {
         // For tests, just log that reload was called
         if cfg!(test) {
@@ -553,8 +566,8 @@ impl Render for TridentApp {
             .pt(px(360.0)) // ~1/3 down from top of screen (1080px / 3)
             .track_focus(&self.focus_handle)
             .on_key_down(
-                cx.listener(|this, event: &KeyDownEvent, _window: &mut Window, cx| {
-                    this.handle_key_event(event, cx);
+                cx.listener(|this, event: &KeyDownEvent, window: &mut Window, cx| {
+                    this.handle_key_event(event, window, cx);
                 }),
             )
             .child(
@@ -593,6 +606,7 @@ fn main() -> Result<()> {
 use std::sync::atomic::{AtomicBool, Ordering};
 static GLOBAL_HOTKEY_TRIGGERED: AtomicBool = AtomicBool::new(false);
 
+#[cfg(not(test))]
 fn run_menubar_app() -> Result<()> {
     Application::new().run(|cx: &mut App| {
         Logger::info("GPUI mode - using LSUIElement in Info.plist for dock icon hiding");
@@ -805,6 +819,7 @@ impl TridentState {
 
 impl Global for TridentState {}
 
+#[cfg(not(test))]
 #[allow(dead_code)]
 fn show_launcher_window(cx: &mut App) {
     // Close existing launcher window if any
@@ -844,20 +859,18 @@ fn show_launcher_window(cx: &mut App) {
     }
 }
 
+#[cfg(not(test))]
 #[allow(dead_code)]
 fn hide_launcher_window(cx: &mut App) {
-    // Close existing launcher window if any
-    let window_handle = cx.update_global::<TridentState, Option<AnyWindowHandle>>(|state, _| {
-        state.launcher_window.take()
+    // Clear existing launcher window from global state
+    // The window itself will be closed by the close_launcher_window method when needed
+    // This function is mainly used to clean up state before opening a new window
+    cx.update_global::<TridentState, ()>(|state, _| {
+        if state.launcher_window.is_some() {
+            Logger::debug("Clearing existing launcher window from global state");
+            state.launcher_window = None;
+        }
     });
-
-    if let Some(_handle) = window_handle {
-        // GPUI windows are automatically closed when their handle is dropped
-        // Just dropping the handle will close the window
-        Logger::info("✅ GPUI launcher window hidden/closed");
-    } else {
-        Logger::debug("No GPUI launcher window to hide");
-    }
 }
 
 #[allow(dead_code)]
