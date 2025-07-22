@@ -601,6 +601,10 @@ fn main() -> Result<()> {
     run_menubar_app()
 }
 
+// Global atomic flag for hotkey communication
+use std::sync::atomic::{AtomicBool, Ordering};
+static GLOBAL_HOTKEY_TRIGGERED: AtomicBool = AtomicBool::new(false);
+
 
 fn run_menubar_app() -> Result<()> {
     Application::new().run(|cx: &mut App| {
@@ -618,10 +622,21 @@ fn run_menubar_app() -> Result<()> {
         
         // Set up periodic tray event checking on the main thread using GPUI timer
         cx.spawn(async move |mut cx| {
-            Logger::info("Tray event processor started - checking every 50ms on main thread");
+            Logger::info("Tray and hotkey event processor started - checking every 50ms on main thread");
+            
             loop {
                 // Use GPUI's timer for main thread scheduling
                 cx.background_executor().timer(std::time::Duration::from_millis(50)).await;
+                
+                // Check for global hotkey triggers
+                if GLOBAL_HOTKEY_TRIGGERED.load(Ordering::SeqCst) {
+                    GLOBAL_HOTKEY_TRIGGERED.store(false, Ordering::SeqCst);
+                    Logger::info("Global hotkey flag detected - triggering launcher");
+                    // Update GPUI global state to show launcher
+                    cx.update_global::<TridentState, ()>(|state, _| {
+                        state.should_show_launcher = true;
+                    }).ok(); // Ignore errors if global not available
+                }
                 
                 // Check for tray events and update GPUI state directly
                 while let Some(event) = tray::TridentTray::try_recv_tray_event() {
@@ -665,27 +680,47 @@ fn run_menubar_app() -> Result<()> {
         // Try native hotkey (objc2-based, single process)
         let mut native_hotkey_manager = NativeHotKeyManager::new();
         
-        // Native hotkey callback - directly updates GPUI state (for when hotkeys work)
+        // Check for accessibility permissions early
+        Logger::info("Checking accessibility permissions for global hotkey...");
+        let has_accessibility = native_hotkey_manager.prompt_for_accessibility_if_needed();
+        
+        if has_accessibility {
+            Logger::info("✅ Accessibility permissions available - global hotkey will be enabled");
+        } else {
+            Logger::warn("⚠️  Accessibility permissions not available - see instructions above");
+        }
+        
+        // Native hotkey callback - directly updates GPUI state
+        // We need to use a global flag that can be checked by the event loop
         let native_hotkey_callback = move || {
-            Logger::info("Native global hotkey triggered - would trigger launcher");
-            // Note: This doesn't currently work due to accessibility permissions
-            // When it works, we'd need to trigger the launcher here
+            Logger::info("Native global hotkey triggered - triggering launcher");
+            // Set a global flag that will be checked by the tray event processor
+            // This is a simple way to bridge the native callback to GPUI state
+            GLOBAL_HOTKEY_TRIGGERED.store(true, Ordering::SeqCst);
         };
         
         native_hotkey_manager.set_callback(native_hotkey_callback).unwrap_or_else(|e| {
             Logger::error(&format!("Failed to set native hotkey callback: {e}"));
         });
 
-        let native_hotkey_success = native_hotkey_manager.register_cmd_shift_s().is_ok();
+        let hotkey_registration_result = native_hotkey_manager.register_cmd_shift_s();
         
-        if native_hotkey_success {
-            Logger::info("✅ GPUI global hotkey registered: Cmd+Shift+S (single-process)");
-            Logger::info("🔗 Hotkey successfully integrated with GPUI window management");
-            // Keep the native hotkey manager alive
-            std::mem::forget(native_hotkey_manager);
-        } else {
-            Logger::error("❌ Failed to register native global hotkey");
-            Logger::warn("⚠️  No global hotkey available - use menubar only");
+        match hotkey_registration_result {
+            Ok(()) => {
+                Logger::info("✅ Global hotkey registered: Cmd+Shift+S");
+                Logger::info("🔗 Hotkey successfully integrated with GPUI window management");
+                // Keep the native hotkey manager alive
+                std::mem::forget(native_hotkey_manager);
+            }
+            Err(e) => {
+                Logger::error("❌ Failed to register global hotkey");
+                Logger::error(&format!("   Error: {}", e));
+                Logger::warn("⚠️  To enable global hotkey (Cmd+Shift+S):");
+                Logger::warn("   1. Open System Settings > Privacy & Security > Accessibility");
+                Logger::warn("   2. Enable 'Trident' (you may need to add it with the + button)");
+                Logger::warn("   3. Restart Trident");
+                Logger::info("🖱️  For now, use the tray icon to access the launcher");
+            }
         }
 
         // Create the cross-platform tray icon

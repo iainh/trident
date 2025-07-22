@@ -18,6 +18,7 @@ use std::ptr::NonNull;
 #[cfg(target_os = "macos")]
 unsafe extern "C" {
     fn AXIsProcessTrusted() -> bool;
+    fn AXIsProcessTrustedWithOptions(options: *const std::ffi::c_void) -> bool;
 }
 
 // Global callback storage for the NSEvent monitor
@@ -37,6 +38,16 @@ impl NativeHotKeyManager {
             event_monitor: None,
             callback: Arc::new(Mutex::new(None)),
         }
+    }
+
+    #[cfg(target_os = "macos")]
+    pub fn prompt_for_accessibility_if_needed(&self) -> bool {
+        self.check_and_prompt_for_accessibility_permissions()
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    pub fn prompt_for_accessibility_if_needed(&self) -> bool {
+        false // No accessibility permissions needed on non-macOS
     }
 
     pub fn set_callback<F>(&mut self, callback: F) -> Result<()>
@@ -60,12 +71,12 @@ impl NativeHotKeyManager {
 
     #[cfg(target_os = "macos")]
     pub fn register_cmd_shift_s(&mut self) -> Result<()> {
-        // Check if accessibility is enabled first
-        if !self.check_accessibility_permissions() {
+        // Check if accessibility is enabled and prompt if needed
+        if !self.check_and_prompt_for_accessibility_permissions() {
             return Err(anyhow!(
                 "Accessibility permissions required for global hotkeys. \
                  Please enable accessibility access for Trident in System Settings > \
-                 Privacy & Security > Accessibility"
+                 Privacy & Security > Accessibility and restart Trident"
             ));
         }
 
@@ -132,6 +143,26 @@ impl NativeHotKeyManager {
         unsafe {
             AXIsProcessTrusted()
         }
+    }
+
+    #[cfg(target_os = "macos")]
+    pub fn check_and_prompt_for_accessibility_permissions(&self) -> bool {
+        // First check if we already have permissions
+        if self.check_accessibility_permissions() {
+            return true;
+        }
+        
+        println!("[INFO] Accessibility permissions not granted.");
+        println!("[INFO] ⚠️  To enable global hotkey (Cmd+Shift+S):");
+        println!("[INFO]    1. Open System Settings > Privacy & Security > Accessibility");
+        println!("[INFO]    2. Click the lock icon to make changes (enter your password)");
+        println!("[INFO]    3. Click the + button and add Trident to the list");
+        println!("[INFO]    4. Enable the checkbox next to Trident");
+        println!("[INFO]    5. Restart Trident");
+        println!("[INFO] 🖱️  For now, use the tray icon (ψ) to access the launcher");
+        
+        // Return false since we don't have permissions yet
+        false
     }
 
     #[cfg(not(target_os = "macos"))]
