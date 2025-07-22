@@ -619,7 +619,23 @@ fn run_menubar_app() -> Result<()> {
             launcher_window: None,
         });
 
-        // Set up periodic tray event checking on the main thread using GPUI timer
+        // Set up observer to respond to launcher show requests BEFORE starting event processor
+        Logger::info("Setting up TridentState observer for launcher window management");
+        cx.observe_global::<TridentState>(move |cx| {
+            // Check GPUI state for launcher window requests
+            if let Some(state) = cx.try_global::<TridentState>() {
+                if state.should_show_launcher {
+                    Logger::info("TridentState observer triggered - showing launcher window");
+                    show_launcher_window(cx);
+                    cx.update_global::<TridentState, ()>(|state, _| {
+                        state.should_show_launcher = false;
+                    });
+                }
+            }
+        }).detach();
+
+        // Set up periodic tray event checking on the main thread using GPUI timer  
+        Logger::info("Starting tray and hotkey event processor...");
         cx.spawn(async move |cx| {
             Logger::info("Tray and hotkey event processor started - checking every 50ms on main thread");
 
@@ -646,14 +662,14 @@ fn run_menubar_app() -> Result<()> {
                             // The launcher is opened via the "Open Trident" menu item
                         }
                         tray::TrayEvent::OpenTrident => {
-                            Logger::info("Open Trident menu item selected - triggering launcher");
-                            // Update GPUI global state to show launcher
-                            match cx.update_global::<TridentState, ()>(|state, _| {
-                                Logger::info("Setting should_show_launcher = true in global state");
-                                state.should_show_launcher = true;
+                            Logger::info("Open Trident menu item selected - triggering launcher directly");
+                            
+                            // Direct approach - call show_launcher_window immediately using cx.update()
+                            match cx.update(|cx| {
+                                show_launcher_window(cx);
                             }) {
-                                Ok(()) => Logger::info("Successfully updated TridentState global"),
-                                Err(e) => Logger::error(&format!("Failed to update TridentState: {e:?}")),
+                                Ok(()) => Logger::info("Successfully created launcher window"),
+                                Err(e) => Logger::error(&format!("Failed to create launcher window: {e:?}")),
                             }
                         }
                         tray::TrayEvent::ToggleStartAtLogin => {
@@ -668,19 +684,7 @@ fn run_menubar_app() -> Result<()> {
             }
         }).detach();
 
-        // Set up observer to respond to launcher show requests
-        cx.observe_global::<TridentState>(move |cx| {
-            // Check GPUI state for launcher window requests
-            if let Some(state) = cx.try_global::<TridentState>() {
-                if state.should_show_launcher {
-                    Logger::info("TridentState observer triggered - showing launcher window");
-                    show_launcher_window(cx);
-                    cx.update_global::<TridentState, ()>(|state, _| {
-                        state.should_show_launcher = false;
-                    });
-                }
-            }
-        }).detach();
+        // Observer already set up earlier to avoid race condition
 
         // No need for menubar callback with tray-icon - events are polled directly
 
