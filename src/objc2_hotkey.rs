@@ -1,34 +1,37 @@
 // ABOUTME: Native macOS global hotkey registration using objc2 and NSEvent
 // ABOUTME: Provides single-process system-wide hotkey capture with main thread callbacks
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use std::sync::{Arc, Mutex};
 
-#[cfg(target_os = "macos")]
-use objc2_app_kit::{NSEvent, NSEventType, NSEventModifierFlags, NSEventMask};
-#[cfg(target_os = "macos")]
-use objc2_foundation::MainThreadMarker;
-#[cfg(target_os = "macos")]
-use objc2::{runtime::AnyObject};
+// Type alias for hotkey callback
+type HotkeyCallback = Arc<Mutex<Option<Box<dyn Fn() + Send + Sync>>>>;
+
 #[cfg(target_os = "macos")]
 use block2::RcBlock;
+#[cfg(target_os = "macos")]
+use objc2::runtime::AnyObject;
+#[cfg(target_os = "macos")]
+use objc2_app_kit::{NSEvent, NSEventMask, NSEventModifierFlags, NSEventType};
+#[cfg(target_os = "macos")]
+use objc2_foundation::MainThreadMarker;
 use std::ptr::NonNull;
 
 // Link to ApplicationServices framework for accessibility permissions
 #[cfg(target_os = "macos")]
 unsafe extern "C" {
     fn AXIsProcessTrusted() -> bool;
+    #[allow(dead_code)]
     fn AXIsProcessTrustedWithOptions(options: *const std::ffi::c_void) -> bool;
 }
 
 // Global callback storage for the NSEvent monitor
-static GLOBAL_HOTKEY_CALLBACK: Mutex<Option<Arc<dyn Fn() + Send + Sync>>> = 
-    Mutex::new(None);
+static GLOBAL_HOTKEY_CALLBACK: Mutex<Option<Arc<dyn Fn() + Send + Sync>>> = Mutex::new(None);
 
 pub struct NativeHotKeyManager {
     #[cfg(target_os = "macos")]
     event_monitor: Option<objc2::rc::Retained<AnyObject>>, // NSEvent monitor reference
-    callback: Arc<Mutex<Option<Box<dyn Fn() + Send + Sync>>>>,
+    callback: HotkeyCallback,
 }
 
 impl NativeHotKeyManager {
@@ -82,25 +85,25 @@ impl NativeHotKeyManager {
 
         unsafe {
             let _mtm = MainThreadMarker::new_unchecked();
-            
+
             // Create a block that will handle NSEvent callbacks
             let handler = RcBlock::new(|event: NonNull<NSEvent>| {
                 let event = event.as_ref();
-                
+
                 // Check if this is a key down event
                 if event.r#type() == NSEventType::KeyDown {
                     // Get the key code and modifiers
                     let key_code = event.keyCode();
                     let modifier_flags = event.modifierFlags();
-                    
+
                     // Check for Cmd+Shift+S (keyCode 1 = S)
                     let cmd_flag = NSEventModifierFlags::Command;
                     let shift_flag = NSEventModifierFlags::Shift;
                     let expected_modifiers = cmd_flag | shift_flag;
-                    
+
                     if key_code == 1 && modifier_flags.contains(expected_modifiers) {
                         println!("[DEBUG] objc2_hotkey: Cmd+Shift+S detected via NSEvent monitor");
-                        
+
                         // Trigger the callback on main thread
                         if let Ok(callback_guard) = GLOBAL_HOTKEY_CALLBACK.lock() {
                             if let Some(ref callback) = *callback_guard {
@@ -108,7 +111,7 @@ impl NativeHotKeyManager {
                                 callback();
                             }
                         }
-                        
+
                         // Note: Global monitors cannot consume events - that's why we get double triggering
                         // We need to use local monitor for event consumption
                     }
@@ -117,22 +120,20 @@ impl NativeHotKeyManager {
 
             // Register the global event monitor for key down events
             let mask = NSEventMask::KeyDown;
-            
+
             let monitor = NSEvent::addGlobalMonitorForEventsMatchingMask_handler(mask, &handler);
-            
+
             match monitor {
                 Some(monitor_obj) => {
                     self.event_monitor = Some(monitor_obj);
                     println!("[INFO] Registered native global hotkey monitor for Cmd+Shift+S");
                     Ok(())
                 }
-                None => {
-                    Err(anyhow!(
-                        "Failed to register global event monitor. \
+                None => Err(anyhow!(
+                    "Failed to register global event monitor. \
                          Please ensure accessibility permissions are granted in System Settings > \
                          Privacy & Security > Accessibility"
-                    ))
-                }
+                )),
             }
         }
     }
@@ -140,9 +141,7 @@ impl NativeHotKeyManager {
     #[cfg(target_os = "macos")]
     fn check_accessibility_permissions(&self) -> bool {
         // Check if we have accessibility permissions using AXIsProcessTrusted
-        unsafe {
-            AXIsProcessTrusted()
-        }
+        unsafe { AXIsProcessTrusted() }
     }
 
     #[cfg(target_os = "macos")]
@@ -151,7 +150,7 @@ impl NativeHotKeyManager {
         if self.check_accessibility_permissions() {
             return true;
         }
-        
+
         println!("[INFO] Accessibility permissions not granted.");
         println!("[INFO] ⚠️  To enable global hotkey (Cmd+Shift+S):");
         println!("[INFO]    1. Open System Settings > Privacy & Security > Accessibility");
@@ -160,7 +159,7 @@ impl NativeHotKeyManager {
         println!("[INFO]    4. Enable the checkbox next to Trident");
         println!("[INFO]    5. Restart Trident");
         println!("[INFO] 🖱️  For now, use the tray icon (ψ) to access the launcher");
-        
+
         // Return false since we don't have permissions yet
         false
     }
@@ -198,8 +197,8 @@ impl Drop for NativeHotKeyManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     #[test]
     fn test_native_hotkey_manager_creation() {
@@ -212,24 +211,26 @@ mod tests {
         let mut manager = NativeHotKeyManager::new();
         let called = Arc::new(AtomicBool::new(false));
         let called_clone = called.clone();
-        
-        manager.set_callback(move || {
-            called_clone.store(true, Ordering::SeqCst);
-        }).unwrap();
-        
+
+        manager
+            .set_callback(move || {
+                called_clone.store(true, Ordering::SeqCst);
+            })
+            .unwrap();
+
         assert!(manager.callback.lock().unwrap().is_some());
     }
 
     #[test]
     fn test_register_unregister() {
         let mut manager = NativeHotKeyManager::new();
-        
+
         // Set a dummy callback first
         manager.set_callback(|| {}).unwrap();
-        
+
         // Registration may fail if not on macOS or permissions not granted
         let result = manager.register_cmd_shift_s();
-        
+
         // If registration succeeded, unregistration should also work
         if result.is_ok() {
             assert!(manager.unregister().is_ok());

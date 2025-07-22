@@ -593,7 +593,6 @@ fn main() -> Result<()> {
         return native_app::run_native_app();
     }
 
-
     Logger::info("Starting Trident SSH Launcher (GPUI mode)...");
     Logger::info("💡 Use --native flag to run in single-process native mode");
 
@@ -605,7 +604,6 @@ fn main() -> Result<()> {
 use std::sync::atomic::{AtomicBool, Ordering};
 static GLOBAL_HOTKEY_TRIGGERED: AtomicBool = AtomicBool::new(false);
 
-
 fn run_menubar_app() -> Result<()> {
     Application::new().run(|cx: &mut App| {
         // Skip activation policy in GPUI mode - GPUI manages its own NSApplication
@@ -613,21 +611,20 @@ fn run_menubar_app() -> Result<()> {
         Logger::info("GPUI mode - using GPUI's application management (dock icon visible)");
 
         // No need for channels with tray-icon - events are handled directly
-        
+
         // Set up global state first so it can be accessed by tray events
         cx.set_global(TridentState {
             should_show_launcher: false,
             launcher_window: None,
         });
-        
+
         // Set up periodic tray event checking on the main thread using GPUI timer
-        cx.spawn(async move |mut cx| {
+        cx.spawn(async move |cx| {
             Logger::info("Tray and hotkey event processor started - checking every 50ms on main thread");
-            
+
             loop {
                 // Use GPUI's timer for main thread scheduling
                 cx.background_executor().timer(std::time::Duration::from_millis(50)).await;
-                
                 // Check for global hotkey triggers
                 if GLOBAL_HOTKEY_TRIGGERED.load(Ordering::SeqCst) {
                     GLOBAL_HOTKEY_TRIGGERED.store(false, Ordering::SeqCst);
@@ -637,10 +634,10 @@ fn run_menubar_app() -> Result<()> {
                         state.should_show_launcher = true;
                     }).ok(); // Ignore errors if global not available
                 }
-                
+
                 // Check for tray events and update GPUI state directly
                 while let Some(event) = tray::TridentTray::try_recv_tray_event() {
-                    Logger::info(&format!("Processing tray event: {:?}", event));
+                    Logger::info(&format!("Processing tray event: {event:?}"));
                     match event {
                         tray::TrayEvent::Click | tray::TrayEvent::DoubleClick | tray::TrayEvent::OpenTrident => {
                             Logger::info("Tray event received: triggering launcher");
@@ -660,7 +657,7 @@ fn run_menubar_app() -> Result<()> {
                 }
             }
         }).detach();
-        
+
         // Set up observer to respond to launcher show requests
         cx.observe_global::<TridentState>(move |cx| {
             // Check GPUI state for launcher window requests
@@ -679,17 +676,17 @@ fn run_menubar_app() -> Result<()> {
 
         // Try native hotkey (objc2-based, single process)
         let mut native_hotkey_manager = NativeHotKeyManager::new();
-        
+
         // Check for accessibility permissions early
         Logger::info("Checking accessibility permissions for global hotkey...");
         let has_accessibility = native_hotkey_manager.prompt_for_accessibility_if_needed();
-        
+
         if has_accessibility {
             Logger::info("✅ Accessibility permissions available - global hotkey will be enabled");
         } else {
             Logger::warn("⚠️  Accessibility permissions not available - see instructions above");
         }
-        
+
         // Native hotkey callback - directly updates GPUI state
         // We need to use a global flag that can be checked by the event loop
         let native_hotkey_callback = move || {
@@ -698,13 +695,13 @@ fn run_menubar_app() -> Result<()> {
             // This is a simple way to bridge the native callback to GPUI state
             GLOBAL_HOTKEY_TRIGGERED.store(true, Ordering::SeqCst);
         };
-        
+
         native_hotkey_manager.set_callback(native_hotkey_callback).unwrap_or_else(|e| {
             Logger::error(&format!("Failed to set native hotkey callback: {e}"));
         });
 
         let hotkey_registration_result = native_hotkey_manager.register_cmd_shift_s();
-        
+
         match hotkey_registration_result {
             Ok(()) => {
                 Logger::info("✅ Global hotkey registered: Cmd+Shift+S");
@@ -714,7 +711,7 @@ fn run_menubar_app() -> Result<()> {
             }
             Err(e) => {
                 Logger::error("❌ Failed to register global hotkey");
-                Logger::error(&format!("   Error: {}", e));
+                Logger::error(&format!("   Error: {e}"));
                 Logger::warn("⚠️  To enable global hotkey (Cmd+Shift+S):");
                 Logger::warn("   1. Open System Settings > Privacy & Security > Accessibility");
                 Logger::warn("   2. Enable 'Trident' (you may need to add it with the + button)");
@@ -747,7 +744,6 @@ fn run_menubar_app() -> Result<()> {
 
     Ok(())
 }
-
 
 #[cfg(not(test))]
 #[allow(dead_code)]
@@ -822,7 +818,6 @@ impl TridentState {
 
 impl Global for TridentState {}
 
-#[cfg(not(test))]
 #[allow(dead_code)]
 fn show_launcher_window(cx: &mut App) {
     // Close existing launcher window if any
@@ -862,14 +857,13 @@ fn show_launcher_window(cx: &mut App) {
     }
 }
 
-#[cfg(not(test))]
 #[allow(dead_code)]
 fn hide_launcher_window(cx: &mut App) {
     // Close existing launcher window if any
     let window_handle = cx.update_global::<TridentState, Option<AnyWindowHandle>>(|state, _| {
         state.launcher_window.take()
     });
-    
+
     if let Some(_handle) = window_handle {
         // GPUI windows are automatically closed when their handle is dropped
         // Just dropping the handle will close the window
@@ -902,7 +896,7 @@ impl Render for TridentMenuBarWindow {
             .key_context("TridentMenuBar")
             .on_action(cx.listener(|_this, _: &ToggleLauncher, _window, cx| {
                 Logger::info("Toggle launcher hotkey triggered!");
-                
+
                 // Directly trigger launcher for the hotkey
                 cx.update_global::<TridentState, ()>(|state, _cx| {
                     state.should_show_launcher = true;

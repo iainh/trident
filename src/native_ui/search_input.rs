@@ -4,14 +4,18 @@
 use anyhow::Result;
 use std::sync::{Arc, RwLock};
 
+// Type alias for text change callback
+type TextChangeCallback = Box<dyn Fn(&str) + Send + Sync>;
+
 #[cfg(target_os = "macos")]
-use objc2_app_kit::{NSTextField, NSView, NSControl, NSText};
+use objc2::{MainThreadOnly, rc::Retained};
 #[cfg(target_os = "macos")]
-use objc2_foundation::{NSString, MainThreadMarker, NSRect, NSPoint, NSSize};
+use objc2_app_kit::NSTextField;
 #[cfg(target_os = "macos")]
-use objc2::{rc::Retained, runtime::AnyObject, msg_send_id, sel, MainThreadOnly};
+use objc2_foundation::{MainThreadMarker, NSRect, NSString};
 
 // Shared state for the search input
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct SearchInputState {
     pub query: String,
@@ -20,6 +24,7 @@ pub struct SearchInputState {
     pub suggestion: Option<String>,
 }
 
+#[allow(dead_code)]
 impl SearchInputState {
     pub fn new(placeholder: String) -> Self {
         Self {
@@ -66,18 +71,20 @@ impl SearchInputState {
 }
 
 // Native macOS search input using NSTextField
+#[allow(dead_code)]
 pub struct NativeSearchInput {
     #[cfg(target_os = "macos")]
     text_field: Option<Retained<NSTextField>>,
     state: Arc<RwLock<SearchInputState>>,
     // Callback for when text changes
-    on_text_change: Option<Box<dyn Fn(&str) + Send + Sync>>,
+    on_text_change: Option<TextChangeCallback>,
 }
 
+#[allow(dead_code)]
 impl NativeSearchInput {
     pub fn new(placeholder: String) -> Self {
         let state = Arc::new(RwLock::new(SearchInputState::new(placeholder)));
-        
+
         Self {
             #[cfg(target_os = "macos")]
             text_field: None,
@@ -101,27 +108,27 @@ impl NativeSearchInput {
     pub fn create_native_view(&mut self, frame: NSRect) -> Result<Retained<NSTextField>> {
         unsafe {
             let mtm = MainThreadMarker::new_unchecked();
-            
+
             // Create NSTextField
             let text_field = NSTextField::initWithFrame(NSTextField::alloc(mtm), frame);
-            
+
             // Configure the text field
             let placeholder_text = {
                 let state = self.state.read().unwrap();
                 NSString::from_str(&state.placeholder)
             };
             text_field.setPlaceholderString(Some(&placeholder_text));
-            
+
             // Set styling for dark mode appearance
             text_field.setBordered(true);
-            
+
             // Make it focusable and editable
             text_field.setEditable(true);
             text_field.setSelectable(true);
-            
+
             // Store reference
             self.text_field = Some(text_field.clone());
-            
+
             Ok(text_field)
         }
     }
@@ -139,18 +146,18 @@ impl NativeSearchInput {
                 text_field.setStringValue(&ns_string);
             }
         }
-        
+
         // Update state
         {
             let mut state = self.state.write().unwrap();
             state.query = new_text.to_string();
         }
-        
+
         // Trigger callback
         if let Some(ref callback) = self.on_text_change {
             callback(new_text);
         }
-        
+
         Ok(())
     }
 
@@ -170,20 +177,18 @@ impl NativeSearchInput {
     #[cfg(target_os = "macos")]
     pub fn focus(&self) -> Result<()> {
         if let Some(text_field) = &self.text_field {
-            unsafe {
-                // Make the text field the first responder to focus it
-                if let Some(window) = text_field.window() {
-                    window.makeFirstResponder(Some(text_field));
-                }
+            // Make the text field the first responder to focus it
+            if let Some(window) = text_field.window() {
+                window.makeFirstResponder(Some(text_field));
             }
         }
-        
+
         // Update state
         {
             let mut state = self.state.write().unwrap();
             state.is_focused = true;
         }
-        
+
         Ok(())
     }
 
@@ -207,11 +212,11 @@ impl NativeSearchInput {
     pub fn update_text(&self, new_text: &str) -> Result<()> {
         let mut state = self.state.write().unwrap();
         state.query = new_text.to_string();
-        
+
         if let Some(ref callback) = self.on_text_change {
             callback(new_text);
         }
-        
+
         Ok(())
     }
 
@@ -233,7 +238,7 @@ impl NativeSearchInput {
             "backspace" => {
                 let mut state = self.state.write().unwrap();
                 state.handle_backspace();
-                
+
                 // Update the native text field
                 #[cfg(target_os = "macos")]
                 if let Some(text_field) = &self.text_field {
@@ -242,18 +247,18 @@ impl NativeSearchInput {
                         text_field.setStringValue(&ns_string);
                     }
                 }
-                
+
                 // Trigger callback
                 if let Some(ref callback) = self.on_text_change {
                     callback(&state.query);
                 }
-                
+
                 Ok(true) // Event handled
             }
             "tab" => {
                 let mut state = self.state.write().unwrap();
                 state.accept_suggestion();
-                
+
                 // Update the native text field
                 #[cfg(target_os = "macos")]
                 if let Some(text_field) = &self.text_field {
@@ -262,12 +267,12 @@ impl NativeSearchInput {
                         text_field.setStringValue(&ns_string);
                     }
                 }
-                
+
                 // Trigger callback
                 if let Some(ref callback) = self.on_text_change {
                     callback(&state.query);
                 }
-                
+
                 Ok(true) // Event handled
             }
             text if text.len() == 1 => {
@@ -276,7 +281,7 @@ impl NativeSearchInput {
                     if ch.is_ascii_graphic() || ch == ' ' {
                         let mut state = self.state.write().unwrap();
                         state.handle_input(text);
-                        
+
                         // Update the native text field
                         #[cfg(target_os = "macos")]
                         if let Some(text_field) = &self.text_field {
@@ -285,18 +290,18 @@ impl NativeSearchInput {
                                 text_field.setStringValue(&ns_string);
                             }
                         }
-                        
+
                         // Trigger callback
                         if let Some(ref callback) = self.on_text_change {
                             callback(&state.query);
                         }
-                        
+
                         return Ok(true); // Event handled
                     }
                 }
                 Ok(false) // Event not handled
             }
-            _ => Ok(false) // Event not handled
+            _ => Ok(false), // Event not handled
         }
     }
 }
@@ -309,7 +314,7 @@ mod tests {
     fn test_native_search_input_creation() {
         let search_input = NativeSearchInput::new("Test placeholder".to_string());
         let state = search_input.state.read().unwrap();
-        
+
         assert_eq!(state.placeholder, "Test placeholder");
         assert!(state.query.is_empty());
         assert!(!state.is_focused);
@@ -319,24 +324,24 @@ mod tests {
     #[test]
     fn test_search_input_state_operations() {
         let mut state = SearchInputState::new("Test".to_string());
-        
+
         // Test input handling
         state.handle_input("hello");
         assert_eq!(state.query, "hello");
-        
+
         // Test backspace
         state.handle_backspace();
         assert_eq!(state.query, "hell");
-        
+
         // Test suggestion
         state.set_suggestion(Some("hello world".to_string()));
         assert_eq!(state.suggestion, Some("hello world".to_string()));
-        
+
         // Test accepting suggestion
         state.accept_suggestion();
         assert_eq!(state.query, "hello world");
         assert!(state.suggestion.is_none());
-        
+
         // Test clear
         state.clear();
         assert!(state.query.is_empty());
@@ -346,13 +351,13 @@ mod tests {
     #[test]
     fn test_key_event_handling() {
         let search_input = NativeSearchInput::new("Test".to_string());
-        
+
         // Test character input
         search_input.handle_key_event("a").unwrap();
         let state = search_input.state.read().unwrap();
         assert_eq!(state.query, "a");
         drop(state);
-        
+
         // Test backspace
         search_input.handle_key_event("backspace").unwrap();
         let state = search_input.state.read().unwrap();

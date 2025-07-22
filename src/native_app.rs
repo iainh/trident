@@ -8,8 +8,8 @@ use crate::objc2_hotkey::NativeHotKeyManager;
 // use crate::menubar::TridentMenuBar; // Replaced with cross-platform tray-icon
 use crate::ssh::parser::HostEntry;
 use anyhow::Result;
+use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, RwLock, mpsc};
-use std::sync::mpsc::{Sender, Receiver};
 
 #[cfg(target_os = "macos")]
 use objc2_app_kit::NSApplication;
@@ -43,8 +43,11 @@ impl Logger {
 #[derive(Debug, Clone)]
 pub enum AppCommand {
     ToggleWindow,
+    #[allow(dead_code)]
     ShowWindow,
+    #[allow(dead_code)]
     HideWindow,
+    #[allow(dead_code)]
     Quit,
 }
 
@@ -52,17 +55,18 @@ pub enum AppCommand {
 pub struct NativeApp {
     // Core application logic (unchanged)
     app_state: Arc<RwLock<AppState>>,
-    
+
     // Native UI components
     launcher_window: Option<NativeWindow>,
-    
+
     // System integration
     hotkey_manager: Option<NativeHotKeyManager>,
     // menubar: Option<TridentMenuBar>, // Replaced with cross-platform tray-icon
-    
+
     // Configuration
+    #[allow(dead_code)]
     config: Config,
-    
+
     // Command channel for thread-safe communication
     command_sender: Sender<AppCommand>,
     command_receiver: Receiver<AppCommand>,
@@ -72,7 +76,7 @@ impl NativeApp {
     pub fn new() -> Result<Self> {
         // Create command channel for thread-safe communication
         let (command_sender, command_receiver) = mpsc::channel();
-        
+
         // Load configuration
         let mut config = Self::load_config().unwrap_or_else(|e| {
             eprintln!("Failed to load config: {e}. Using defaults.");
@@ -133,7 +137,10 @@ impl NativeApp {
         if config.parsing.parse_known_hosts {
             let known_hosts_path = std::path::Path::new(&config.ssh.known_hosts_path);
             if known_hosts_path.exists() {
-                match crate::ssh::parser::parse_known_hosts(known_hosts_path, config.parsing.skip_hashed_hosts) {
+                match crate::ssh::parser::parse_known_hosts(
+                    known_hosts_path,
+                    config.parsing.skip_hashed_hosts,
+                ) {
                     Ok(hosts) => {
                         Logger::info(&format!("Loaded {} hosts from known_hosts", hosts.len()));
                         all_hosts.extend(hosts);
@@ -149,7 +156,10 @@ impl NativeApp {
         if config.parsing.parse_ssh_config {
             let ssh_config_path = std::path::Path::new(&config.ssh.config_path);
             if ssh_config_path.exists() {
-                match crate::ssh::parser::parse_ssh_config(ssh_config_path, config.parsing.simple_config_parsing) {
+                match crate::ssh::parser::parse_ssh_config(
+                    ssh_config_path,
+                    config.parsing.simple_config_parsing,
+                ) {
                     Ok(hosts) => {
                         Logger::info(&format!("Loaded {} hosts from SSH config", hosts.len()));
                         all_hosts.extend(hosts);
@@ -168,8 +178,14 @@ impl NativeApp {
         if all_hosts.is_empty() {
             Logger::warn("No SSH hosts found, using examples");
             vec![
-                HostEntry::new("example1.com".to_string(), "ssh user@example1.com".to_string()),
-                HostEntry::new("example2.com".to_string(), "ssh user@example2.com".to_string()),
+                HostEntry::new(
+                    "example1.com".to_string(),
+                    "ssh user@example1.com".to_string(),
+                ),
+                HostEntry::new(
+                    "example2.com".to_string(),
+                    "ssh user@example2.com".to_string(),
+                ),
             ]
         } else {
             all_hosts
@@ -183,17 +199,17 @@ impl NativeApp {
             let state = self.app_state.read().unwrap();
             state.hosts.clone()
         };
-        
+
         let mut window = NativeWindow::new(window_config, hosts);
-        
+
         // Set up window callbacks
-        let app_state_clone = self.app_state.clone();
+        let _app_state_clone = self.app_state.clone();
         window.set_host_selected_callback(move |host| {
             Logger::info(&format!("Selected host: {}", host.name));
             // TODO: Launch SSH connection
         });
 
-        let app_state_clone = self.app_state.clone();
+        let _app_state_clone = self.app_state.clone();
         window.set_escape_callback(move || {
             Logger::info("Escape pressed - hiding window");
             // TODO: Hide window
@@ -201,19 +217,19 @@ impl NativeApp {
 
         // Create the native window (simplified for now)
         window.create_native_window()?;
-        
+
         self.launcher_window = Some(window);
         Logger::info("Native launcher window initialized");
-        
+
         Ok(())
     }
 
     pub fn setup_global_hotkey(&mut self) -> Result<()> {
         let mut hotkey_manager = NativeHotKeyManager::new();
-        
+
         // Clone the command sender for the hotkey callback
         let command_sender = self.command_sender.clone();
-        
+
         // Create callback that sends toggle command to main thread
         let window_show_callback = move || {
             Logger::info("Global hotkey triggered - sending toggle window command");
@@ -223,9 +239,9 @@ impl NativeApp {
                 Logger::info("🎯 Hotkey integration working - toggle command sent");
             }
         };
-        
+
         hotkey_manager.set_callback(window_show_callback)?;
-        
+
         match hotkey_manager.register_cmd_shift_s() {
             Ok(()) => {
                 Logger::info("✅ Native global hotkey registered: Cmd+Shift+S (single-process)");
@@ -293,6 +309,7 @@ impl NativeApp {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn handle_key_event(&self, key: &str) -> Result<bool> {
         if let Some(window) = &self.launcher_window {
             window.handle_key_event(key)
@@ -301,6 +318,7 @@ impl NativeApp {
         }
     }
 
+    #[allow(dead_code)]
     pub fn update_hosts(&self, hosts: Vec<HostEntry>) -> Result<()> {
         // Update app state
         {
@@ -308,15 +326,16 @@ impl NativeApp {
             state.hosts = hosts.clone();
             state.filtered_hosts = hosts.clone();
         }
-        
+
         // Update UI
         if let Some(window) = &self.launcher_window {
             window.update_hosts(hosts)?;
         }
-        
+
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn is_launcher_visible(&self) -> bool {
         if let Some(window) = &self.launcher_window {
             window.is_visible()
@@ -325,19 +344,23 @@ impl NativeApp {
         }
     }
 
+    #[allow(dead_code)]
     pub fn get_app_state(&self) -> Arc<RwLock<AppState>> {
         self.app_state.clone()
     }
 
     pub fn run_command_loop(&mut self) -> Result<()> {
         Logger::info("Starting command processing loop");
-        
+
         loop {
             // Process commands with a timeout to prevent blocking indefinitely
-            match self.command_receiver.recv_timeout(std::time::Duration::from_millis(100)) {
+            match self
+                .command_receiver
+                .recv_timeout(std::time::Duration::from_millis(100))
+            {
                 Ok(command) => {
-                    Logger::debug(&format!("Processing command: {:?}", command));
-                    
+                    Logger::debug(&format!("Processing command: {command:?}"));
+
                     match command {
                         AppCommand::ToggleWindow => {
                             if let Err(e) = self.toggle_launcher() {
@@ -376,11 +399,12 @@ impl NativeApp {
                 }
             }
         }
-        
+
         Logger::info("Command loop finished");
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn get_command_sender(&self) -> Sender<AppCommand> {
         self.command_sender.clone()
     }
@@ -389,7 +413,7 @@ impl NativeApp {
 // Helper function to run the native app without GPUI
 pub fn run_native_app() -> Result<()> {
     Logger::info("Starting Trident SSH Launcher (Native Mode)...");
-    
+
     // First, initialize NSApplication to set up Core Graphics properly
     #[cfg(target_os = "macos")]
     {
@@ -399,39 +423,39 @@ pub fn run_native_app() -> Result<()> {
             // This initializes the Core Graphics connection properly
         }
     }
-    
+
     let mut app = NativeApp::new()?;
-    
+
     // Configure as background app (after NSApplication is initialized)
     app.configure_app_as_background()?;
-    
+
     // Set up system integration (before UI to avoid graphics calls)
     if let Err(e) = app.setup_global_hotkey() {
         Logger::warn(&format!("Failed to set up global hotkey: {e}"));
         Logger::warn("Continuing with menubar-only operation");
     }
-    
+
     // if let Err(e) = app.setup_menubar() {
     //     Logger::warn(&format!("Failed to set up menubar: {e}"));
     //     Logger::warn("Continuing without menubar integration");
     // }
     Logger::info("Using cross-platform tray-icon instead of native menubar");
-    
+
     // Initialize UI components (after Core Graphics is ready)
     app.initialize_ui()?;
-    
+
     Logger::info("🚀 Trident is running in native mode!");
     Logger::info("• Press Cmd+Shift+S to open SSH launcher");
     Logger::info("• Click the ψ (trident) icon in your menubar");
     Logger::info("• No process spawning - single process architecture");
-    
+
     // Use a simple event loop without UI creation for now
     // This proves the architecture works without graphics complications
     Logger::info("📍 Native app is running - press Ctrl+C to exit");
-    
+
     // Main event loop to process commands
     app.run_command_loop()?;
-    
+
     Ok(())
 }
 
@@ -443,7 +467,7 @@ mod tests {
     fn test_native_app_creation() {
         let app = NativeApp::new();
         assert!(app.is_ok());
-        
+
         let app = app.unwrap();
         assert!(!app.is_launcher_visible());
     }
@@ -452,7 +476,7 @@ mod tests {
     fn test_load_ssh_hosts() {
         let config = Config::default();
         let hosts = NativeApp::load_ssh_hosts(&config);
-        
+
         // Should return example hosts when no SSH files exist
         assert!(!hosts.is_empty());
         assert!(hosts.iter().any(|h| h.name.contains("example")));
