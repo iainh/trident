@@ -4,8 +4,6 @@ mod app;
 mod config;
 mod fuzzy;
 // mod menubar; // Replaced with cross-platform tray-icon implementation
-mod native_app;
-mod native_ui;
 mod objc2_hotkey;
 mod ssh;
 mod tray;
@@ -585,16 +583,7 @@ impl Render for TridentApp {
 
 #[cfg(not(test))]
 fn main() -> Result<()> {
-    let args: Vec<String> = std::env::args().collect();
-
-    // Check for native mode flag
-    if args.len() > 1 && args[1] == "--native" {
-        Logger::info("Starting Trident in native mode (no GPUI)...");
-        return native_app::run_native_app();
-    }
-
-    Logger::info("Starting Trident SSH Launcher (GPUI mode)...");
-    Logger::info("💡 Use --native flag to run in single-process native mode");
+    Logger::info("Starting Trident SSH Launcher...");
 
     // Run the menubar app within GPUI context
     run_menubar_app()
