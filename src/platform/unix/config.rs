@@ -304,16 +304,72 @@ impl ConfigDetector for UnixConfigDetector {
             }
         }
 
+        // Add FreeBSD-specific detection from ports if no terminals found
+        if cfg!(target_os = "freebsd") && detected.is_empty() {
+            detected.extend(Self::detect_freebsd_ports_terminals());
+        }
+
         detected
     }
 
+    #[cfg(target_os = "freebsd")]
+    fn detect_freebsd_ports_terminals() -> Vec<DetectedTerminal> {
+        let mut terminals = Vec::new();
+        
+        // Check common FreeBSD ports locations
+        let ports_terminals = [
+            ("xterm", "/usr/local/bin/xterm"),
+            ("rxvt-unicode", "/usr/local/bin/urxvt"),
+            ("alacritty", "/usr/local/bin/alacritty"),
+            ("kitty", "/usr/local/bin/kitty"),
+        ];
+
+        for (name, path) in ports_terminals {
+            if Path::new(path).exists() {
+                let args = match name {
+                    "alacritty" => vec!["-e".to_string(), "sh".to_string(), "-c".to_string(), "{ssh_command}".to_string()],
+                    "kitty" => vec!["sh".to_string(), "-c".to_string(), "{ssh_command}".to_string()],
+                    _ => vec!["-e".to_string(), "sh".to_string(), "-c".to_string(), "{ssh_command}".to_string()],
+                };
+
+                terminals.push(DetectedTerminal {
+                    name: name.to_string(),
+                    program: path.to_string(),
+                    args,
+                    desktop_file: None, // FreeBSD doesn't typically use desktop files
+                    detection_paths: vec![path.to_string()],
+                });
+            }
+        }
+
+        terminals
+    }
+
+    #[cfg(not(target_os = "freebsd"))]
+    fn detect_freebsd_ports_terminals() -> Vec<DetectedTerminal> {
+        Vec::new()
+    }
+
     fn get_default_ssh_paths(&self) -> SshPaths {
-        let ssh_binary = if Self::check_program_exists("/usr/bin/ssh") {
-            "/usr/bin/ssh".to_string()
-        } else if Self::check_program_exists("/usr/local/bin/ssh") {
-            "/usr/local/bin/ssh".to_string()
+        // FreeBSD typically installs packages in /usr/local/bin, Linux in /usr/bin
+        let ssh_binary = if cfg!(target_os = "freebsd") {
+            // FreeBSD preference: /usr/local/bin first
+            if Self::check_program_exists("/usr/local/bin/ssh") {
+                "/usr/local/bin/ssh".to_string()
+            } else if Self::check_program_exists("/usr/bin/ssh") {
+                "/usr/bin/ssh".to_string()
+            } else {
+                "ssh".to_string()
+            }
         } else {
-            "ssh".to_string() // Hope it's in PATH
+            // Linux preference: /usr/bin first  
+            if Self::check_program_exists("/usr/bin/ssh") {
+                "/usr/bin/ssh".to_string()
+            } else if Self::check_program_exists("/usr/local/bin/ssh") {
+                "/usr/local/bin/ssh".to_string()
+            } else {
+                "ssh".to_string()
+            }
         };
 
         SshPaths {

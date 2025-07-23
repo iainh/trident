@@ -2,7 +2,7 @@
 name = "trident"
 version = "0.1.0"
 edition = "2024"
-description = "SSH Connection Launcher for macOS"
+description = "SSH Connection Launcher for macOS, Linux, and FreeBSD"
 license = "MIT"
 
 [package.metadata.bundle]
