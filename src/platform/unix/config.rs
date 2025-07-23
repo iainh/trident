@@ -78,29 +78,24 @@ impl UnixConfigDetector {
                 let name = desktop_entry.name(None)?.to_string();
                 let exec = desktop_entry.exec()?.to_string();
                 
-                // Parse exec string to extract program and args
-                // This is simplified - full implementation would handle Exec field properly
-                let parts: Vec<&str> = exec.split_whitespace().collect();
+                // Parse exec string to extract program (handle %U, %F, etc.)
+                let exec_clean = exec
+                    .replace("%U", "")
+                    .replace("%F", "")
+                    .replace("%u", "")
+                    .replace("%f", "");
+                
+                let parts: Vec<&str> = exec_clean.split_whitespace().collect();
                 if let Some(program) = parts.first() {
                     // Check if this is a terminal emulator
                     let lower_name = name.to_lowercase();
-                    if lower_name.contains("terminal") || 
-                       lower_name.contains("console") ||
-                       program.contains("terminal") ||
-                       program.contains("term") {
-                        
+                    let lower_exec = exec.to_lowercase();
+                    
+                    if Self::is_terminal_application(&lower_name, &lower_exec, program) {
                         let detection_paths = vec![program.to_string()];
                         
                         // Generate appropriate args based on known terminals
-                        let args = match program.to_lowercase().as_str() {
-                            p if p.contains("gnome-terminal") => vec!["--".to_string(), "{ssh_command}".to_string()],
-                            p if p.contains("konsole") => vec!["-e".to_string(), "{ssh_command}".to_string()],
-                            p if p.contains("xfce4-terminal") => vec!["-e".to_string(), "{ssh_command}".to_string()],
-                            p if p.contains("alacritty") => vec!["-e".to_string(), "sh".to_string(), "-c".to_string(), "{ssh_command}".to_string()],
-                            p if p.contains("kitty") => vec!["sh".to_string(), "-c".to_string(), "{ssh_command}".to_string()],
-                            p if p.contains("wezterm") => vec!["start".to_string(), "{ssh_command}".to_string()],
-                            _ => vec!["-e".to_string(), "{ssh_command}".to_string()], // Generic fallback
-                        };
+                        let args = Self::get_terminal_args(program);
 
                         return Some(DetectedTerminal {
                             name,
@@ -116,12 +111,49 @@ impl UnixConfigDetector {
         None
     }
 
+    fn is_terminal_application(name: &str, exec: &str, program: &str) -> bool {
+        // Known terminal identifiers
+        let terminal_keywords = [
+            "terminal", "console", "term", "shell", "prompt",
+            "gnome-terminal", "konsole", "xfce4-terminal", "alacritty",
+            "kitty", "wezterm", "tilix", "terminator", "urxvt", "rxvt",
+            "xterm", "eterm", "aterm", "hyper", "terminus", "tabby"
+        ];
+        
+        terminal_keywords.iter().any(|keyword| {
+            name.contains(keyword) || exec.contains(keyword) || program.contains(keyword)
+        })
+    }
+
+    fn get_terminal_args(program: &str) -> Vec<String> {
+        let lower_program = program.to_lowercase();
+        
+        // Return appropriate args for known terminals
+        match lower_program.as_str() {
+            p if p.contains("gnome-terminal") => vec!["--".to_string(), "{ssh_command}".to_string()],
+            p if p.contains("konsole") => vec!["-e".to_string(), "{ssh_command}".to_string()],
+            p if p.contains("xfce4-terminal") => vec!["-e".to_string(), "{ssh_command}".to_string()],
+            p if p.contains("tilix") => vec!["-e".to_string(), "{ssh_command}".to_string()],
+            p if p.contains("terminator") => vec!["-e".to_string(), "{ssh_command}".to_string()],
+            p if p.contains("alacritty") => vec!["-e".to_string(), "sh".to_string(), "-c".to_string(), "{ssh_command}".to_string()],
+            p if p.contains("kitty") => vec!["sh".to_string(), "-c".to_string(), "{ssh_command}".to_string()],
+            p if p.contains("wezterm") => vec!["start".to_string(), "{ssh_command}".to_string()],
+            p if p.contains("hyper") => vec!["-e".to_string(), "{ssh_command}".to_string()],
+            p if p.contains("tabby") => vec!["run".to_string(), "{ssh_command}".to_string()],
+            p if p.contains("urxvt") || p.contains("rxvt") => vec!["-e".to_string(), "sh".to_string(), "-c".to_string(), "{ssh_command}".to_string()],
+            p if p.contains("xterm") => vec!["-e".to_string(), "sh".to_string(), "-c".to_string(), "{ssh_command}".to_string()],
+            _ => vec!["-e".to_string(), "{ssh_command}".to_string()], // Generic fallback
+        }
+    }
+
     #[cfg(not(target_os = "linux"))]
     fn parse_desktop_file(_file_path: &Path) -> Option<DetectedTerminal> {
         None // FreeBSD doesn't use freedesktop_desktop_entry
     }
 
     fn get_common_unix_terminals() -> Vec<DetectedTerminal> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/home/user".to_string());
+        
         vec![
             DetectedTerminal {
                 name: "GNOME Terminal".to_string(),
@@ -131,6 +163,7 @@ impl UnixConfigDetector {
                 detection_paths: vec![
                     "/usr/bin/gnome-terminal".to_string(),
                     "/usr/local/bin/gnome-terminal".to_string(),
+                    "/app/bin/gnome-terminal".to_string(), // Flatpak
                 ],
             },
             DetectedTerminal {
@@ -141,6 +174,7 @@ impl UnixConfigDetector {
                 detection_paths: vec![
                     "/usr/bin/konsole".to_string(),
                     "/usr/local/bin/konsole".to_string(),
+                    "/app/bin/konsole".to_string(), // Flatpak
                 ],
             },
             DetectedTerminal {
@@ -151,7 +185,9 @@ impl UnixConfigDetector {
                 detection_paths: vec![
                     "/usr/bin/alacritty".to_string(),
                     "/usr/local/bin/alacritty".to_string(),
-                    "/home/.cargo/bin/alacritty".to_string(),
+                    format!("{}/.cargo/bin/alacritty", home),
+                    "/snap/bin/alacritty".to_string(), // Snap
+                    "/app/bin/alacritty".to_string(), // Flatpak
                 ],
             },
             DetectedTerminal {
@@ -162,6 +198,7 @@ impl UnixConfigDetector {
                 detection_paths: vec![
                     "/usr/bin/kitty".to_string(),
                     "/usr/local/bin/kitty".to_string(),
+                    format!("{}/.local/bin/kitty", home),
                 ],
             },
             DetectedTerminal {
@@ -172,6 +209,7 @@ impl UnixConfigDetector {
                 detection_paths: vec![
                     "/usr/bin/wezterm".to_string(),
                     "/usr/local/bin/wezterm".to_string(),
+                    "/app/bin/wezterm".to_string(), // Flatpak
                 ],
             },
             DetectedTerminal {
@@ -185,10 +223,63 @@ impl UnixConfigDetector {
                 ],
             },
             DetectedTerminal {
+                name: "Tilix".to_string(),
+                program: "tilix".to_string(),
+                args: vec!["-e".to_string(), "{ssh_command}".to_string()],
+                desktop_file: Some("com.gexperts.Tilix.desktop".to_string()),
+                detection_paths: vec![
+                    "/usr/bin/tilix".to_string(),
+                    "/usr/local/bin/tilix".to_string(),
+                    "/app/bin/tilix".to_string(), // Flatpak
+                ],
+            },
+            DetectedTerminal {
+                name: "Terminator".to_string(),
+                program: "terminator".to_string(),
+                args: vec!["-e".to_string(), "{ssh_command}".to_string()],
+                desktop_file: Some("terminator.desktop".to_string()),
+                detection_paths: vec![
+                    "/usr/bin/terminator".to_string(),
+                    "/usr/local/bin/terminator".to_string(),
+                ],
+            },
+            DetectedTerminal {
+                name: "Hyper".to_string(),
+                program: "hyper".to_string(),
+                args: vec!["-e".to_string(), "{ssh_command}".to_string()],
+                desktop_file: Some("hyper.desktop".to_string()),
+                detection_paths: vec![
+                    "/usr/bin/hyper".to_string(),
+                    "/usr/local/bin/hyper".to_string(),
+                    "/opt/Hyper/hyper".to_string(),
+                ],
+            },
+            DetectedTerminal {
+                name: "Tabby".to_string(),
+                program: "tabby".to_string(),
+                args: vec!["run".to_string(), "{ssh_command}".to_string()],
+                desktop_file: Some("tabby.desktop".to_string()),
+                detection_paths: vec![
+                    "/usr/bin/tabby".to_string(),
+                    "/usr/local/bin/tabby".to_string(),
+                    "/app/bin/tabby".to_string(), // Flatpak
+                ],
+            },
+            DetectedTerminal {
+                name: "rxvt-unicode".to_string(),
+                program: "urxvt".to_string(),
+                args: vec!["-e".to_string(), "sh".to_string(), "-c".to_string(), "{ssh_command}".to_string()],
+                desktop_file: Some("urxvt.desktop".to_string()),
+                detection_paths: vec![
+                    "/usr/bin/urxvt".to_string(),
+                    "/usr/local/bin/urxvt".to_string(),
+                ],
+            },
+            DetectedTerminal {
                 name: "xterm".to_string(),
                 program: "xterm".to_string(),
-                args: vec!["-e".to_string(), "{ssh_command}".to_string()],
-                desktop_file: None,
+                args: vec!["-e".to_string(), "sh".to_string(), "-c".to_string(), "{ssh_command}".to_string()],
+                desktop_file: Some("xterm.desktop".to_string()),
                 detection_paths: vec![
                     "/usr/bin/xterm".to_string(),
                     "/usr/local/bin/xterm".to_string(),

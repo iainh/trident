@@ -36,30 +36,49 @@ impl UnixTerminalLauncher {
     }
 
     fn bring_terminal_to_front_unix(&self, app_name: &str) -> Result<()> {
+        println!("[DEBUG] Attempting to bring terminal '{}' to front", app_name);
+        
         // Try various methods to bring the terminal to front on Unix
+        let mut success = false;
         
         // Method 1: Try wmctrl if available
         if let Ok(output) = Command::new("wmctrl").arg("-l").output() {
             if output.status.success() {
+                println!("[DEBUG] wmctrl available, trying to activate window");
                 // wmctrl is available, try to activate the window
-                let _ = Command::new("wmctrl")
+                if let Ok(result) = Command::new("wmctrl")
                     .args(["-a", app_name])
-                    .output();
+                    .output() {
+                    if result.status.success() {
+                        success = true;
+                        println!("[DEBUG] wmctrl activation successful");
+                    }
+                }
             }
         }
 
-        // Method 2: Try xdotool if available
-        if let Ok(output) = Command::new("xdotool").arg("--version").output() {
-            if output.status.success() {
-                // xdotool is available, try to search and activate
-                let _ = Command::new("xdotool")
-                    .args(["search", "--name", app_name, "windowactivate"])
-                    .output();
+        // Method 2: Try xdotool if available and wmctrl didn't work
+        if !success {
+            if let Ok(output) = Command::new("xdotool").arg("--version").output() {
+                if output.status.success() {
+                    println!("[DEBUG] xdotool available, trying to search and activate");
+                    // xdotool is available, try to search and activate
+                    if let Ok(result) = Command::new("xdotool")
+                        .args(["search", "--name", app_name, "windowactivate"])
+                        .output() {
+                        if result.status.success() {
+                            success = true;
+                            println!("[DEBUG] xdotool activation successful");
+                        }
+                    }
+                }
             }
         }
 
-        // Method 3: Desktop environment specific
-        self.try_de_specific_activation(app_name)?;
+        // Method 3: Desktop environment specific (fallback)
+        if !success {
+            self.try_de_specific_activation(app_name)?;
+        }
 
         Ok(())
     }
