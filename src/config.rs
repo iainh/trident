@@ -47,10 +47,10 @@ fn default_skip_hashed_hosts() -> bool {
 }
 
 #[derive(Debug, Clone)]
-struct DetectedTerminal {
-    name: String,
-    program: String,
-    args: Vec<String>,
+pub struct DetectedTerminal {
+    pub name: String,
+    pub program: String,
+    pub args: Vec<String>,
 }
 
 impl Default for Config {
@@ -319,7 +319,7 @@ case_sensitive = false
     }
 
     /// Detect the best available terminal on the system
-    fn detect_best_terminal() -> DetectedTerminal {
+    pub fn detect_best_terminal() -> DetectedTerminal {
         let terminals = vec![
             DetectedTerminal {
                 name: "Ghostty".to_string(),

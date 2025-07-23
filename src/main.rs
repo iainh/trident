@@ -3,8 +3,8 @@
 mod app;
 mod config;
 mod fuzzy;
-// mod menubar; // Replaced with cross-platform tray-icon implementation
 mod objc2_hotkey;
+mod platform;
 mod ssh;
 mod tray;
 mod ui;
@@ -13,8 +13,8 @@ use anyhow::Result;
 use app::AppState;
 use config::Config;
 use gpui::*;
-// Removed fallback hotkey manager - using native objc2 implementation only
-use objc2_hotkey::NativeHotKeyManager;
+// Platform abstraction for cross-platform hotkey management
+use platform::Platform;
 use ssh::{HostEntry, TerminalLauncher, parse_known_hosts, parse_ssh_config};
 use std::path::Path;
 use ui::{HostList, SearchInput};
@@ -394,7 +394,7 @@ impl TridentApp {
             if let Err(e) = self.launch_host(host) {
                 Logger::error(&format!("Failed to launch host: {e}"));
             }
-            // Close window after launching, but keep app running  
+            // Close window after launching, but keep app running
             self.close_launcher_window(window, cx);
         }
     }
@@ -485,12 +485,12 @@ impl TridentApp {
         // In current GPUI, use cx.hide() to hide the window instead of dropping handles
         // This is the correct way to close a specific window without quitting the app
         cx.hide();
-        
+
         // Clear the launcher window from global state
         cx.update_global::<TridentState, ()>(|state, _| {
             state.launcher_window = None;
         });
-        
+
         Logger::info("✅ Launcher window hidden, tray icon remains active");
     }
 
@@ -634,7 +634,7 @@ fn run_menubar_app() -> Result<()> {
             }
         }).detach();
 
-        // Set up periodic tray event checking on the main thread using GPUI timer  
+        // Set up periodic tray event checking on the main thread using GPUI timer
         Logger::info("Starting tray and hotkey event processor...");
         cx.spawn(async move |cx| {
             Logger::info("Tray and hotkey event processor started - checking every 50ms on main thread");
@@ -663,7 +663,7 @@ fn run_menubar_app() -> Result<()> {
                         }
                         tray::TrayEvent::OpenTrident => {
                             Logger::info("Open Trident menu item selected - triggering launcher directly");
-                            
+
                             // Direct approach - call show_launcher_window immediately using cx.update()
                             match cx.update(|cx| {
                                 show_launcher_window(cx);
@@ -688,48 +688,42 @@ fn run_menubar_app() -> Result<()> {
 
         // No need for menubar callback with tray-icon - events are polled directly
 
-        // Try native hotkey (objc2-based, single process)
-        let mut native_hotkey_manager = NativeHotKeyManager::new();
+        // Try platform-specific hotkey manager
+        let mut hotkey_manager = Platform::hotkey_manager();
 
-        // Check for accessibility permissions early
-        Logger::info("Checking accessibility permissions for global hotkey...");
-        let has_accessibility = native_hotkey_manager.prompt_for_accessibility_if_needed();
+        // Check for permissions early
+        Logger::info("Checking permissions for global hotkey...");
+        let has_permissions = hotkey_manager.check_permissions();
 
-        if has_accessibility {
-            Logger::info("✅ Accessibility permissions available - global hotkey will be enabled");
+        if has_permissions {
+            Logger::info("✅ Permissions available - global hotkey will be enabled");
         } else {
-            Logger::warn("⚠️  Accessibility permissions not available - see instructions above");
+            Logger::warn("⚠️  Permissions not available - see instructions above");
         }
 
-        // Native hotkey callback - directly updates GPUI state
+        // Platform hotkey callback - directly updates GPUI state
         // We need to use a global flag that can be checked by the event loop
-        let native_hotkey_callback = move || {
-            Logger::info("Native global hotkey triggered - triggering launcher");
+        let hotkey_callback = move || {
+            Logger::info("Platform global hotkey triggered - triggering launcher");
             // Set a global flag that will be checked by the tray event processor
             // This is a simple way to bridge the native callback to GPUI state
             GLOBAL_HOTKEY_TRIGGERED.store(true, Ordering::SeqCst);
         };
 
-        native_hotkey_manager.set_callback(native_hotkey_callback).unwrap_or_else(|e| {
-            Logger::error(&format!("Failed to set native hotkey callback: {e}"));
-        });
-
-        let hotkey_registration_result = native_hotkey_manager.register_cmd_shift_s();
+        let hotkey_registration_result = hotkey_manager.register_hotkey(Box::new(hotkey_callback));
 
         match hotkey_registration_result {
             Ok(()) => {
                 Logger::info("✅ Global hotkey registered: Cmd+Shift+S");
                 Logger::info("🔗 Hotkey successfully integrated with GPUI window management");
-                // Keep the native hotkey manager alive
-                std::mem::forget(native_hotkey_manager);
+                // Keep the hotkey manager alive
+                std::mem::forget(hotkey_manager);
             }
             Err(e) => {
                 Logger::error("❌ Failed to register global hotkey");
                 Logger::error(&format!("   Error: {e}"));
-                Logger::warn("⚠️  To enable global hotkey (Cmd+Shift+S):");
-                Logger::warn("   1. Open System Settings > Privacy & Security > Accessibility");
-                Logger::warn("   2. Enable 'Trident' (you may need to add it with the + button)");
-                Logger::warn("   3. Restart Trident");
+                Logger::warn("⚠️  To enable global hotkey:");
+                Logger::warn("   Check platform-specific requirements or use tray icon");
                 Logger::info("🖱️  For now, use the tray icon to access the launcher");
             }
         }
