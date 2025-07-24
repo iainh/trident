@@ -41,7 +41,6 @@ jobs:
           libssl-dev \
           libgtk-3-dev \
           libglib2.0-dev \
-          libgio-2.0-dev \
           libcairo2-dev \
           libpango1.0-dev \
           libgdk-pixbuf2.0-dev \
@@ -145,7 +144,6 @@ jobs:
           libssl-dev \
           libgtk-3-dev \
           libglib2.0-dev \
-          libgio-2.0-dev \
           libcairo2-dev \
           libpango1.0-dev \
           libgdk-pixbuf2.0-dev \
