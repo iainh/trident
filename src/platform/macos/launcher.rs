@@ -12,6 +12,7 @@ pub struct MacOSTerminalLauncher {
 }
 
 impl MacOSTerminalLauncher {
+    #[allow(dead_code)]
     pub fn new(config: TerminalConfig) -> Self {
         Self {
             launcher: ExistingTerminalLauncher::new(config),
@@ -30,7 +31,7 @@ impl PlatformTerminalLauncher for MacOSTerminalLauncher {
     fn bring_to_front(&self, app_name: &str) -> Result<()> {
         // Use AppleScript to bring app to front
         use std::process::Command;
-        let script = format!("tell application \"{}\" to activate", app_name);
+        let script = format!("tell application \"{app_name}\" to activate");
         Command::new("osascript")
             .args(["-e", &script])
             .output()?;

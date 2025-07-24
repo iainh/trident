@@ -36,6 +36,7 @@ impl SearchInput {
         self.suggestion = None; // Clear suggestion when typing
     }
 
+    #[allow(dead_code)]
     pub fn handle_backspace(&mut self) {
         self.query.pop();
         self.suggestion = None; // Clear suggestion when deleting
@@ -47,10 +48,12 @@ impl SearchInput {
         self.suggestion = None;
     }
 
+    #[allow(dead_code)]
     pub fn set_suggestion(&mut self, suggestion: Option<String>) {
         self.suggestion = suggestion;
     }
 
+    #[allow(dead_code)]
     pub fn accept_suggestion(&mut self) {
         if let Some(suggestion) = &self.suggestion {
             self.query = suggestion.clone();

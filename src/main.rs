@@ -11,107 +11,65 @@ mod ui;
 
 use anyhow::Result;
 use app::AppState;
-use config::Config;
+use config::{Config};
 use gpui::*;
-// Platform abstraction for cross-platform hotkey management
 use platform::Platform;
 use ssh::{HostEntry, TerminalLauncher, parse_known_hosts, parse_ssh_config};
 use std::path::Path;
 use ui::{HostList, SearchInput};
+use tracing_subscriber::FmtSubscriber;
+use tracing::{info, warn, error, Level};
 
-// Define actions for the SSH launcher
 actions!(trident, [ShowLauncher, QuitApp, ToggleLauncher]);
 
-// Tray-icon integration - no global channels needed
-
-// Global signal removed - now using GPUI actions for single-process operation
-
-// Simple logging utility for troubleshooting
-pub struct Logger;
-
-impl Logger {
-    pub fn info(msg: &str) {
-        println!("[INFO] {msg}");
-    }
-
-    pub fn warn(msg: &str) {
-        eprintln!("[WARN] {msg}");
-    }
-
-    pub fn error(msg: &str) {
-        eprintln!("[ERROR] {msg}");
-    }
-
-    pub fn debug(msg: &str) {
-        if std::env::var("TRIDENT_DEBUG").is_ok() {
-            eprintln!("[DEBUG] {msg}");
-        }
-    }
-}
-
-// Zed-like theme colors for dark mode
 struct ZedTheme;
 
 #[allow(dead_code)]
 impl ZedTheme {
     fn elevated_surface_background() -> Hsla {
-        // Zed's modal/popover background using hex
-        rgb(0x282c34).into() // Dark blue-gray from Zed
+        rgb(0x282c34).into()
     }
 
     fn surface_background() -> Hsla {
-        // List background - slightly darker using hex
-        rgb(0x252930).into() // Darker blue-gray
+        rgb(0x252930).into()
     }
 
     fn editor_background() -> Hsla {
-        // Search input background - same as surface for seamless look
         rgb(0x252930).into()
     }
 
     fn border() -> Hsla {
-        // Subtle borders using hex
-        rgb(0x3c4043).into() // Subtle blue-gray border
+        rgb(0x3c4043).into()
     }
 
     fn text() -> Hsla {
-        // Primary text color using hex
-        rgb(0xd4d4d4).into() // Light gray text
+        rgb(0xd4d4d4).into()
     }
 
     fn text_placeholder() -> Hsla {
-        // Placeholder text using hex
-        rgb(0x8c8c8c).into() // Medium gray
+        rgb(0x8c8c8c).into()
     }
 
     fn text_muted() -> Hsla {
-        // Secondary text using hex
-        rgb(0xa5a5a5).into() // Lighter gray for secondary text
+        rgb(0xa5a5a5).into()
     }
 
     fn text_accent() -> Hsla {
-        // Accent text for selected items - Zed's blue using hex
-        rgb(0x569cd6).into() // #569cd6
+        rgb(0x569cd6).into()
     }
 
     fn ghost_element_hover() -> Hsla {
-        // Hover background for list items - subtle blue-gray using hex
-        rgb(0x454a55).into() // #454a55
+        rgb(0x454a55).into()
     }
 
     fn ghost_element_selected() -> Hsla {
-        // Selected background for list items - blue accent background
-        hsla(207.0 / 360.0, 0.7, 0.25, 0.2) // Blue with transparency - try different hue format
+        hsla(207.0 / 360.0, 0.7, 0.25, 0.2)
     }
 
     fn cursor() -> Hsla {
-        // Cursor color - same as primary text for consistency
-        rgb(0xd4d4d4).into() // Light gray cursor like Zed
+        rgb(0xd4d4d4).into()
     }
 }
-
-// Trident now runs as a background application that responds to Cmd+Shift+S hotkey
-// This gives us the core menubar-like functionality without complex StatusItem management
 
 struct TridentApp {
     state: AppState,
@@ -124,29 +82,24 @@ struct TridentApp {
 impl TridentApp {
     #[cfg(not(test))]
     fn new(cx: &mut Context<Self>) -> Self {
-        // Load configuration
         let mut config = Self::load_config().unwrap_or_else(|e| {
-            eprintln!("Failed to load config: {e}. Using defaults.");
+            error!("Failed to load config: {}. Using defaults.", e);
             Config::default()
         });
 
-        // Expand tilde paths
         if let Err(e) = config.expand_path() {
-            eprintln!("Failed to expand config paths: {e}. Using defaults.");
+            error!("Failed to expand config paths: {}. Using defaults.", e);
             config = Config::default();
         }
 
-        // Validate configuration
         if let Err(e) = config.validate() {
-            eprintln!("Invalid configuration: {e}. Using defaults.");
+            error!("Invalid configuration: {}. Using defaults.", e);
             config = Config::default();
         }
 
-        // Create state with loaded config
         let mut state = AppState::new();
         state.config = config.clone();
 
-        // Load SSH hosts from files
         let hosts = Self::load_ssh_hosts(&config);
         state.hosts = hosts.clone();
         state.filtered_hosts = hosts.clone();
@@ -169,11 +122,11 @@ impl TridentApp {
     fn new(cx: &mut Context<Self>) -> Self {
         use config::{ParsingConfig, SshConfig, TerminalConfig, UiConfig};
 
-        // Create a minimal test configuration
         let config = Config {
             terminal: TerminalConfig {
                 program: "/bin/echo".to_string(),
                 args: vec!["test".to_string()],
+                strategy: config::LaunchStrategy::ShellCommand,
             },
             ssh: SshConfig {
                 known_hosts_path: "/tmp/test_known_hosts".to_string(),
@@ -190,6 +143,7 @@ impl TridentApp {
                 max_results: 10,
                 case_sensitive: false,
             },
+            hotkey: HotkeyConfig::default(),
         };
 
         let mut state = AppState::new();
@@ -208,17 +162,12 @@ impl TridentApp {
     }
 
     fn load_config() -> Result<Config> {
-        // Try to load from default config path
         let config_path = Config::default_config_path()?;
 
         if !config_path.exists() {
-            // Create generated config file with terminal detection
             Config::save_generated_config(&config_path)
                 .map_err(|e| anyhow::anyhow!("Failed to create configuration file: {}", e))?;
-            Logger::info(&format!(
-                "Created configuration with auto-detected terminal at: {}",
-                config_path.display()
-            ));
+            info!("Created configuration with auto-detected terminal at: {}", config_path.display());
         }
 
         Config::load_from_file(&config_path)
@@ -227,103 +176,39 @@ impl TridentApp {
     fn load_ssh_hosts(config: &Config) -> Vec<HostEntry> {
         let mut all_hosts = Vec::new();
 
-        // Parse known_hosts if enabled
         if config.parsing.parse_known_hosts {
             let known_hosts_path = Path::new(&config.ssh.known_hosts_path);
             if !known_hosts_path.exists() {
-                Logger::warn(&format!(
-                    "known_hosts file '{}' not found. Skipping known_hosts parsing.",
-                    config.ssh.known_hosts_path
-                ));
-                Logger::warn(&format!(
-                    "  To fix: Create the file with 'touch {}' or disable with 'parse_known_hosts = false' in config",
-                    config.ssh.known_hosts_path
-                ));
+                warn!("known_hosts file '{}' not found. Skipping known_hosts parsing.", config.ssh.known_hosts_path);
             } else {
-                Logger::debug(&format!(
-                    "Parsing known_hosts file: {}",
-                    config.ssh.known_hosts_path
-                ));
                 match parse_known_hosts(known_hosts_path, config.parsing.skip_hashed_hosts) {
-                    Ok(hosts) => {
-                        if hosts.is_empty() {
-                            Logger::info("known_hosts file exists but contains no parseable hosts");
-                        } else {
-                            Logger::info(&format!("Loaded {} hosts from known_hosts", hosts.len()));
-                        }
-                        all_hosts.extend(hosts);
-                    }
-                    Err(e) => {
-                        Logger::error(&format!(
-                            "Failed to parse known_hosts '{}': {}",
-                            config.ssh.known_hosts_path, e
-                        ));
-                        Logger::warn(
-                            "  Continuing without known_hosts. Check file format or disable with 'parse_known_hosts = false'",
-                        );
-                    }
+                    Ok(hosts) => all_hosts.extend(hosts),
+                    Err(e) => error!("Failed to parse known_hosts: {}", e),
                 }
             }
         }
 
-        // Parse SSH config if enabled
         if config.parsing.parse_ssh_config {
             let ssh_config_path = Path::new(&config.ssh.config_path);
             if !ssh_config_path.exists() {
-                Logger::warn(&format!(
-                    "SSH config file '{}' not found. Skipping SSH config parsing.",
-                    config.ssh.config_path
-                ));
-                Logger::warn(
-                    "  To fix: Create a config file or disable with 'parse_ssh_config = false' in config",
-                );
+                warn!("SSH config file '{}' not found. Skipping SSH config parsing.", config.ssh.config_path);
             } else {
-                Logger::debug(&format!(
-                    "Parsing SSH config file: {}",
-                    config.ssh.config_path
-                ));
                 match parse_ssh_config(ssh_config_path, config.parsing.simple_config_parsing) {
-                    Ok(hosts) => {
-                        if hosts.is_empty() {
-                            Logger::info("SSH config file exists but contains no Host entries");
-                        } else {
-                            Logger::info(&format!("Loaded {} hosts from SSH config", hosts.len()));
-                        }
-                        all_hosts.extend(hosts);
-                    }
-                    Err(e) => {
-                        Logger::error(&format!(
-                            "Failed to parse SSH config '{}': {}",
-                            config.ssh.config_path, e
-                        ));
-                        Logger::warn(
-                            "  Continuing without SSH config. Check file format or disable with 'parse_ssh_config = false'",
-                        );
-                    }
+                    Ok(hosts) => all_hosts.extend(hosts),
+                    Err(e) => error!("Failed to parse SSH config: {}", e),
                 }
             }
         }
 
-        // Remove duplicates and sort
         all_hosts.sort_by(|a, b| a.name.cmp(&b.name));
         all_hosts.dedup_by(|a, b| a.name == b.name);
 
-        // Fallback to examples if no hosts found
         if all_hosts.is_empty() {
-            Logger::warn("No SSH hosts found, using examples");
-            Logger::info("To add real hosts: add entries to ~/.ssh/known_hosts or ~/.ssh/config");
+            warn!("No SSH hosts found, using examples");
             vec![
-                HostEntry::new(
-                    "example1.com".to_string(),
-                    "ssh user@example1.com".to_string(),
-                ),
-                HostEntry::new(
-                    "example2.com".to_string(),
-                    "ssh user@example2.com".to_string(),
-                ),
+                HostEntry::new("example.com".to_string(), "ssh user@example.com".to_string()),
             ]
         } else {
-            Logger::debug(&format!("Total {} unique hosts loaded", all_hosts.len()));
             all_hosts
         }
     }
@@ -331,150 +216,44 @@ impl TridentApp {
     fn handle_key_event(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         match event.keystroke.key.as_str() {
             "up" => {
-                if !self.host_list.is_empty() {
-                    self.host_list.select_previous();
-                    cx.notify();
-                }
+                self.host_list.select_previous();
+                cx.notify();
             }
             "down" => {
-                if !self.host_list.is_empty() {
-                    self.host_list.select_next();
-                    cx.notify();
-                }
+                self.host_list.select_next();
+                cx.notify();
             }
             "enter" => {
                 if let Some(host) = self.host_list.get_selected_host() {
                     if let Err(e) = self.launch_host(host) {
-                        Logger::error(&format!("Failed to launch host: {e}"));
+                        error!("Failed to launch host: {}", e);
                     }
-                    // Close window after launching, but keep app running
                     self.close_launcher_window(window, cx);
                 }
             }
             "escape" => {
-                // Close window on escape, but keep app running
                 self.close_launcher_window(window, cx);
             }
-            "tab" => {
-                // Accept autocomplete suggestion
-                self.search_input.accept_suggestion();
-                self.update_search();
-                cx.notify();
-            }
-            "r" if event.keystroke.modifiers.platform => {
-                // Reload configuration (Cmd+R)
-                self.reload_config_and_hosts();
-                cx.notify();
-            }
-            "backspace" => {
-                self.search_input.handle_backspace();
-                self.update_search();
-                cx.notify();
-            }
-            text => {
-                // Handle regular character input
-                if text.len() == 1 {
-                    if let Some(ch) = text.chars().next() {
-                        if ch.is_ascii_graphic() || ch == ' ' {
-                            self.search_input.handle_input(text);
-                            self.update_search();
-                            cx.notify();
-                        }
-                    }
+            _ => {
+                if let Some(text) = &event.keystroke.key_char {
+                    self.search_input.handle_input(text);
+                    self.update_search();
+                    cx.notify();
                 }
             }
         }
     }
 
-    #[allow(dead_code)]
-    fn handle_host_click(&mut self, host_index: usize, window: &mut Window, cx: &mut Context<Self>) {
-        // Select and launch the clicked host
-        self.host_list.select_index(host_index);
-        if let Some(host) = self.host_list.get_selected_host() {
-            if let Err(e) = self.launch_host(host) {
-                Logger::error(&format!("Failed to launch host: {e}"));
-            }
-            // Close window after launching, but keep app running
-            self.close_launcher_window(window, cx);
-        }
-    }
-
-    #[allow(dead_code)]
-    fn handle_host_double_click(&mut self, host_index: usize, _cx: &mut Context<Self>) {
-        // Launch the double-clicked host
-        if let Some(host) = self.host_list.hosts.get(host_index) {
-            if let Err(e) = self.launch_host(host) {
-                Logger::error(&format!("Failed to launch host: {e}"));
-            }
-        }
-    }
-
-    #[cfg(not(test))]
-    fn render_search_input(&self, _cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .flex()
-            .items_center()
-            .w_full()
-            .h(px(48.0))
-            .child(self.search_input.clone())
-    }
-
-    #[cfg(not(test))]
-    fn render_host_list_always(&self, _cx: &mut Context<Self>) -> impl IntoElement {
-        // Create a host list with the correct hosts to display
-        let hosts_to_show = if self.search_input.query.is_empty() {
-            self.state.hosts.clone()
-        } else {
-            self.host_list.hosts.clone()
-        };
-
-        let mut display_list = HostList::new(hosts_to_show);
-        display_list.selected_index = self.host_list.selected_index;
-
-        div().flex().flex_col().child(display_list)
-    }
-
     fn update_search(&mut self) {
-        // Update the app state with the current search query
         self.state.search_query = self.search_input.query.clone();
-
-        // Use the real search functionality
         let search_engine = fuzzy::SearchEngine::new(self.state.hosts.clone());
         let results = search_engine.search(
             &self.state.search_query,
             self.state.config.ui.case_sensitive,
             self.state.config.ui.max_results,
         );
-
-        // Convert search results to owned hosts
         let filtered_hosts: Vec<HostEntry> = results.into_iter().cloned().collect();
-        self.host_list.set_hosts(filtered_hosts.clone());
-
-        // Find and set autocomplete suggestion
-        let suggestion = self.find_autocomplete_suggestion(&filtered_hosts);
-        self.search_input.set_suggestion(suggestion);
-    }
-
-    fn find_autocomplete_suggestion(&self, filtered_hosts: &[HostEntry]) -> Option<String> {
-        let query = &self.search_input.query;
-
-        // Don't suggest if query is empty
-        if query.is_empty() {
-            return None;
-        }
-
-        // Find the best prefix match from results
-        let query_lower = query.to_lowercase();
-
-        // Look for exact prefix matches first
-        for host in filtered_hosts {
-            let host_name_lower = host.name.to_lowercase();
-            if host_name_lower.starts_with(&query_lower) && host.name.len() > query.len() {
-                return Some(host.name.clone());
-            }
-        }
-
-        None
+        self.host_list.set_hosts(filtered_hosts);
     }
 
     fn launch_host(&self, host: &HostEntry) -> Result<()> {
@@ -482,88 +261,23 @@ impl TridentApp {
     }
 
     fn close_launcher_window(&self, _window: &mut Window, cx: &mut Context<Self>) {
-        // In current GPUI, use cx.hide() to hide the window instead of dropping handles
-        // This is the correct way to close a specific window without quitting the app
         cx.hide();
-
-        // Clear the launcher window from global state
         cx.update_global::<TridentState, ()>(|state, _| {
             state.launcher_window = None;
         });
-
-        Logger::info("✅ Launcher window hidden, tray icon remains active");
-    }
-
-    fn reload_config_and_hosts(&mut self) {
-        // For tests, just log that reload was called
-        if cfg!(test) {
-            Logger::info("Config reload triggered (test mode)");
-            return;
-        }
-
-        Logger::info("Reloading configuration and SSH hosts...");
-
-        // Load new configuration
-        match Self::load_config() {
-            Ok(mut new_config) => {
-                // Expand tilde paths
-                if let Err(e) = new_config.expand_path() {
-                    Logger::error(&format!("Failed to expand config paths during reload: {e}"));
-                    return;
-                }
-
-                // Validate configuration
-                if let Err(e) = new_config.validate() {
-                    Logger::error(&format!("Invalid configuration during reload: {e}"));
-                    return;
-                }
-
-                // Update app state with new config
-                self.state.config = new_config.clone();
-
-                // Update terminal launcher with new config
-                self.terminal_launcher = TerminalLauncher::new(new_config.terminal.clone());
-
-                // Reload SSH hosts with new config
-                let new_hosts = Self::load_ssh_hosts(&new_config);
-                self.state.hosts = new_hosts.clone();
-                self.state.filtered_hosts = new_hosts.clone();
-
-                // Update host list and clear current search
-                self.host_list.set_hosts(new_hosts.clone());
-                self.search_input.query.clear();
-                self.search_input.suggestion = None;
-
-                // Reset search state
-                self.state.search_query.clear();
-                self.update_search();
-
-                Logger::info("Configuration and SSH hosts reloaded successfully");
-            }
-            Err(e) => {
-                Logger::error(&format!("Failed to reload configuration: {e}"));
-            }
-        }
     }
 }
 
-// Integration tests are challenging with GPUI due to macro complexity
-// Core logic is tested in individual modules (config, ssh, fuzzy, app, ui)
-// UI functionality is tested through manual testing and the running application
-
-#[cfg(not(test))]
 impl Render for TridentApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        // Focus the window when it first appears
         window.focus(&self.focus_handle);
-
         div()
             .flex()
             .items_start()
             .justify_center()
             .w_full()
             .h_full()
-            .pt(px(360.0)) // ~1/3 down from top of screen (1080px / 3)
+            .pt(px(360.0))
             .track_focus(&self.focus_handle)
             .on_key_down(
                 cx.listener(|this, event: &KeyDownEvent, window: &mut Window, cx| {
@@ -574,274 +288,86 @@ impl Render for TridentApp {
                 div()
                     .flex()
                     .flex_col()
-                    .w(px(600.0)) // Fixed width like Zed's command palette
-                    .max_h(px(500.0)) // Reasonable max height to prevent overflow
-                    .bg(ZedTheme::elevated_surface_background().alpha(0.75)) // 25% transparency
+                    .w(px(600.0))
+                    .max_h(px(500.0))
+                    .bg(ZedTheme::elevated_surface_background().alpha(0.75))
                     .border_1()
-                    .border_color(hsla(0.0, 0.0, 1.0, 0.15)) // Subtle white border with 15% opacity
+                    .border_color(hsla(0.0, 0.0, 1.0, 0.15))
                     .rounded_lg()
-                    .overflow_hidden() // This clips content to rounded corners
+                    .overflow_hidden()
                     .shadow(vec![BoxShadow {
-                        color: hsla(0.0, 0.0, 0.0, 0.3),      // Dark shadow with 30% opacity
-                        offset: Point::new(px(0.0), px(8.0)), // Drop shadow downward
-                        blur_radius: px(24.0),                // macOS-style blur
+                        color: hsla(0.0, 0.0, 0.0, 0.3),
+                        offset: Point::new(px(0.0), px(8.0)),
+                        blur_radius: px(24.0),
                         spread_radius: px(0.0),
                     }])
-                    .p(px(4.0)) // Add padding to prevent content from covering rounded corners
-                    .child(self.render_search_input(cx))
-                    .child(self.render_host_list_always(cx)),
+                    .p(px(4.0))
+                    .child(self.search_input.clone())
+                    .child(self.host_list.clone()),
             )
     }
 }
 
 #[cfg(not(test))]
 fn main() -> Result<()> {
-    Logger::info("Starting Trident SSH Launcher...");
+    let subscriber = FmtSubscriber::builder()
+        .with_max_level(Level::INFO)
+        .finish();
+    tracing::subscriber::set_global_default(subscriber)?;
 
-    // Run the menubar app within GPUI context
+    info!("Starting Trident SSH Launcher...");
     run_menubar_app()
 }
 
-// Global atomic flag for hotkey communication
 use std::sync::atomic::{AtomicBool, Ordering};
 static GLOBAL_HOTKEY_TRIGGERED: AtomicBool = AtomicBool::new(false);
 
 #[cfg(not(test))]
 fn run_menubar_app() -> Result<()> {
     Application::new().run(|cx: &mut App| {
-        Logger::info("GPUI mode - using LSUIElement in Info.plist for dock icon hiding");
+        let _config = TridentApp::load_config().unwrap_or_default();
 
-        // No need for channels with tray-icon - events are handled directly
+        cx.set_global(TridentState { launcher_window: None });
 
-        // Set up global state first so it can be accessed by tray events
-        cx.set_global(TridentState {
-            should_show_launcher: false,
-            launcher_window: None,
-        });
-
-        // Set up observer to respond to launcher show requests BEFORE starting event processor
-        Logger::info("Setting up TridentState observer for launcher window management");
         cx.observe_global::<TridentState>(move |cx| {
-            // Check GPUI state for launcher window requests
-            if let Some(state) = cx.try_global::<TridentState>() {
-                if state.should_show_launcher {
-                    Logger::info("TridentState observer triggered - showing launcher window");
-                    show_launcher_window(cx);
-                    cx.update_global::<TridentState, ()>(|state, _| {
-                        state.should_show_launcher = false;
-                    });
-                }
+            if cx.global::<TridentState>().launcher_window.is_none() && GLOBAL_HOTKEY_TRIGGERED.load(Ordering::SeqCst) {
+                GLOBAL_HOTKEY_TRIGGERED.store(false, Ordering::SeqCst);
+                show_launcher_window(cx);
             }
         }).detach();
 
-        // Set up periodic tray event checking on the main thread using GPUI timer
-        Logger::info("Starting tray and hotkey event processor...");
-        cx.spawn(async move |cx| {
-            Logger::info("Tray and hotkey event processor started - checking every 50ms on main thread");
-
-            loop {
-                // Use GPUI's timer for main thread scheduling
-                cx.background_executor().timer(std::time::Duration::from_millis(50)).await;
-                // Check for global hotkey triggers
-                if GLOBAL_HOTKEY_TRIGGERED.load(Ordering::SeqCst) {
-                    GLOBAL_HOTKEY_TRIGGERED.store(false, Ordering::SeqCst);
-                    Logger::info("Global hotkey flag detected - triggering launcher");
-                    // Update GPUI global state to show launcher
-                    cx.update_global::<TridentState, ()>(|state, _| {
-                        state.should_show_launcher = true;
-                    }).ok(); // Ignore errors if global not available
-                }
-
-                // Check for tray events and update GPUI state directly
-                while let Some(event) = tray::TridentTray::try_recv_tray_event() {
-                    Logger::info(&format!("Processing tray event: {event:?}"));
-                    match event {
-                        tray::TrayEvent::Click | tray::TrayEvent::DoubleClick => {
-                            Logger::info("Tray icon clicked - context menu should appear");
-                            // Clicks on tray icon should only show the context menu
-                            // The launcher is opened via the "Open Trident" menu item
-                        }
-                        tray::TrayEvent::OpenTrident => {
-                            Logger::info("Open Trident menu item selected - triggering launcher directly");
-
-                            // Direct approach - call show_launcher_window immediately using cx.update()
-                            match cx.update(|cx| {
-                                show_launcher_window(cx);
-                            }) {
-                                Ok(()) => Logger::info("Successfully created launcher window"),
-                                Err(e) => Logger::error(&format!("Failed to create launcher window: {e:?}")),
-                            }
-                        }
-                        tray::TrayEvent::ToggleStartAtLogin => {
-                            Logger::info("Toggle start at login (not implemented)");
-                        }
-                        tray::TrayEvent::Quit => {
-                            Logger::info("Quit requested from tray menu");
-                            std::process::exit(0);
-                        }
-                    }
-                }
-            }
-        }).detach();
-
-        // Observer already set up earlier to avoid race condition
-
-        // No need for menubar callback with tray-icon - events are polled directly
-
-        // Try platform-specific hotkey manager
         let mut hotkey_manager = Platform::hotkey_manager();
-
-        // Check for permissions early
-        Logger::info("Checking permissions for global hotkey...");
-        let has_permissions = hotkey_manager.check_permissions();
-
-        if has_permissions {
-            Logger::info("✅ Permissions available - global hotkey will be enabled");
-        } else {
-            Logger::warn("⚠️  Permissions not available - see instructions above");
-        }
-
-        // Platform hotkey callback - directly updates GPUI state
-        // We need to use a global flag that can be checked by the event loop
         let hotkey_callback = move || {
-            Logger::info("Platform global hotkey triggered - triggering launcher");
-            // Set a global flag that will be checked by the tray event processor
-            // This is a simple way to bridge the native callback to GPUI state
             GLOBAL_HOTKEY_TRIGGERED.store(true, Ordering::SeqCst);
         };
 
-        let hotkey_registration_result = hotkey_manager.register_hotkey(Box::new(hotkey_callback));
-
-        match hotkey_registration_result {
-            Ok(()) => {
-                Logger::info("✅ Global hotkey registered: Cmd+Shift+S");
-                Logger::info("🔗 Hotkey successfully integrated with GPUI window management");
-                // Keep the hotkey manager alive
-                std::mem::forget(hotkey_manager);
-            }
-            Err(e) => {
-                Logger::error("❌ Failed to register global hotkey");
-                Logger::error(&format!("   Error: {e}"));
-                Logger::warn("⚠️  To enable global hotkey:");
-                Logger::warn("   Check platform-specific requirements or use tray icon");
-                Logger::info("🖱️  For now, use the tray icon to access the launcher");
-            }
+        if let Err(e) = hotkey_manager.register_hotkey(Box::new(hotkey_callback)) {
+            error!("Failed to register global hotkey: {}", e);
         }
+        std::mem::forget(hotkey_manager);
 
-        // Create the cross-platform tray icon
-        let _tray = match tray::TridentTray::new() {
-            Ok(tray) => {
-                Logger::info("Cross-platform tray icon created! Look for the ψ (trident) icon in your system tray");
-                Logger::info("Press Cmd+Shift+S to open the SSH launcher");
-                Logger::info("🔗 Tray icon successfully integrated with GPUI event system");
-                tray
-            }
-            Err(e) => {
-                Logger::error(&format!("Failed to create tray icon: {e}"));
-                Logger::info("Falling back to window-based approach - will restart with window mode");
-                panic!("Failed to create tray icon: {e}");
-            }
-        };
-
-        // Keep the tray alive by forgetting it
+        let _tray = tray::TridentTray::new().expect("Failed to create tray icon");
         std::mem::forget(_tray);
 
-        // Set focus behavior to not activate when clicked
         cx.activate(false);
     });
 
     Ok(())
 }
 
-#[cfg(not(test))]
-#[allow(dead_code)]
-fn run_with_window() -> Result<()> {
-    Application::new().run(|cx: &mut App| {
-        // Create a small menubar window that shows the Trident icon
-        let menu_window = cx.open_window(
-            WindowOptions {
-                titlebar: Some(TitlebarOptions {
-                    appears_transparent: true,
-                    title: Some("Trident SSH Launcher".into()),
-                    ..Default::default()
-                }),
-                window_bounds: Some(WindowBounds::Windowed(Bounds {
-                    origin: Point::new(px(50.0), px(50.0)),
-                    size: Size {
-                        width: px(200.0),
-                        height: px(100.0),
-                    },
-                })),
-                is_movable: true,
-                kind: WindowKind::Normal,
-                ..Default::default()
-            },
-            |_, cx| cx.new(|_cx| TridentMenuBarWindow::new()),
-        );
-
-        if let Ok(_window) = menu_window {
-            // Register key bindings
-            cx.bind_keys([
-                KeyBinding::new("cmd-shift-s", ToggleLauncher, Some("TridentMenuBar")),
-                KeyBinding::new("cmd-q", QuitApp, Some("TridentMenuBar")),
-            ]);
-
-            // For now, we'll check the global flag in action handlers
-            // TODO: Find a better way to bridge native callbacks to GPUI
-
-            // Store the window handle globally so we can manage it
-            cx.observe_global::<TridentState>(move |cx| {
-                // Check GPUI state for launcher window requests
-                if let Some(state) = cx.try_global::<TridentState>() {
-                    if state.should_show_launcher {
-                        show_launcher_window(cx);
-                        cx.update_global::<TridentState, ()>(|state, _| {
-                            state.should_show_launcher = false;
-                        });
-                    }
-                }
-            })
-            .detach();
-        }
-
-        cx.activate(true);
-    });
-
-    Ok(())
-}
-
 #[derive(Default)]
-#[allow(dead_code)]
 struct TridentState {
-    should_show_launcher: bool,
     launcher_window: Option<AnyWindowHandle>,
 }
-
-#[allow(dead_code)]
-impl TridentState {
-    fn new() -> Self {
-        Self::default()
-    }
-}
-
 impl Global for TridentState {}
 
 #[cfg(not(test))]
-#[allow(dead_code)]
 fn show_launcher_window(cx: &mut App) {
-    // Close existing launcher window if any
-    hide_launcher_window(cx);
+    if cx.global::<TridentState>().launcher_window.is_some() {
+        return;
+    }
 
-    // Get display bounds for positioning
-    let display_bounds = cx.primary_display().map(|d| d.bounds()).unwrap_or(Bounds {
-        origin: Point::new(px(0.0), px(0.0)),
-        size: Size {
-            width: px(1920.0),
-            height: px(1080.0),
-        },
-    });
-
-    // Create the search window
+    let display_bounds = cx.primary_display().map_or(Bounds::default(), |d| d.bounds());
     let window = cx.open_window(
         WindowOptions {
             titlebar: None,
@@ -849,116 +375,19 @@ fn show_launcher_window(cx: &mut App) {
             is_movable: false,
             kind: WindowKind::PopUp,
             window_background: WindowBackgroundAppearance::Transparent,
-            window_decorations: Some(WindowDecorations::Client),
             ..Default::default()
         },
         |_, cx| cx.new(TridentApp::new),
     );
 
-    // Store the window handle
     if let Ok(handle) = window {
         cx.update_global::<TridentState, ()>(|state, _| {
             state.launcher_window = Some(handle.into());
         });
-        Logger::info("✅ GPUI launcher window created and shown");
-    } else {
-        Logger::error("❌ Failed to create GPUI launcher window");
     }
 }
-
-#[cfg(not(test))]
-#[allow(dead_code)]
-fn hide_launcher_window(cx: &mut App) {
-    // Clear existing launcher window from global state
-    // The window itself will be closed by the close_launcher_window method when needed
-    // This function is mainly used to clean up state before opening a new window
-    cx.update_global::<TridentState, ()>(|state, _| {
-        if state.launcher_window.is_some() {
-            Logger::debug("Clearing existing launcher window from global state");
-            state.launcher_window = None;
-        }
-    });
-}
-
-#[allow(dead_code)]
-struct TridentMenuBarWindow;
-
-#[allow(dead_code)]
-impl TridentMenuBarWindow {
-    fn new() -> Self {
-        Self
-    }
-}
-
-impl Render for TridentMenuBarWindow {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .flex()
-            .flex_col()
-            .items_center()
-            .justify_center()
-            .w_full()
-            .h_full()
-            .bg(rgb(0xF5F5F5))
-            .key_context("TridentMenuBar")
-            .on_action(cx.listener(|_this, _: &ToggleLauncher, _window, cx| {
-                Logger::info("Toggle launcher hotkey triggered!");
-
-                // Directly trigger launcher for the hotkey
-                cx.update_global::<TridentState, ()>(|state, _cx| {
-                    state.should_show_launcher = true;
-                });
-            }))
-            .on_action(cx.listener(|_this, _: &QuitApp, _window, cx| {
-                Logger::info("Quitting Trident...");
-                cx.quit();
-            }))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .w(px(60.0))
-                    .h(px(60.0))
-                    .bg(rgb(0x007AFF))
-                    .rounded_lg()
-                    .cursor_pointer()
-                    .hover(|style| style.bg(rgb(0x0051D5)))
-                    .on_mouse_down(MouseButton::Left, |_event, _window, cx| {
-                        Logger::info("Menu icon clicked!");
-                        cx.update_global::<TridentState, ()>(|state, _cx| {
-                            state.should_show_launcher = true;
-                        });
-                    })
-                    .child(
-                        div()
-                            .text_color(rgb(0xFFFFFF))
-                            .text_size(px(14.0))
-                            .font_weight(FontWeight::BOLD)
-                            .child("SSH"),
-                    ),
-            )
-            .child(
-                div()
-                    .mt(px(10.0))
-                    .text_color(rgb(0x666666))
-                    .text_size(px(11.0))
-                    .child("Click to open launcher"),
-            )
-            .child(
-                div()
-                    .mt(px(5.0))
-                    .text_color(rgb(0x666666))
-                    .text_size(px(10.0))
-                    .child("Cmd+Shift+S to toggle"),
-            )
-    }
-}
-
-// Actions are defined above using the actions! macro
 
 #[cfg(test)]
 fn main() -> Result<()> {
-    // Tests only main function
     Ok(())
 }

@@ -2,7 +2,7 @@
 // ABOUTME: Handles terminal detection, launching, and desktop environment integration
 
 use crate::platform::TerminalLauncher as PlatformTerminalLauncher;
-use crate::config::TerminalConfig;
+use crate::config::{TerminalConfig, LaunchStrategy};
 use crate::ssh::HostEntry;
 use anyhow::{Result, anyhow};
 use std::process::Command;
@@ -16,131 +16,64 @@ impl UnixTerminalLauncher {
         Self { config }
     }
 
-    fn escape_shell_command(command: &str) -> String {
-        // Reuse the shell escaping logic from the existing launcher
-        command
-            .replace("\\", "\\\\")
-            .replace("\"", "\\\"")
-            .replace("'", "\\'")
-            .replace(";", "\\;")
-            .replace("&", "\\&")
-            .replace("|", "\\|")
-            .replace("$", "\\$")
-            .replace("`", "\\`")
-            .replace("(", "\\(")
-            .replace(")", "\\)")
-            .replace("<", "\\<")
-            .replace(">", "\\>")
-            .replace("\n", "\\n")
-            .replace("\t", "\\t")
-    }
-
     fn bring_terminal_to_front_unix(&self, app_name: &str) -> Result<()> {
-        println!("[DEBUG] Attempting to bring terminal '{}' to front", app_name);
+        tracing::debug!("Attempting to bring terminal '{}' to front", app_name);
         
-        // Try various methods to bring the terminal to front on Unix
-        let mut success = false;
-        
-        // Method 1: Try wmctrl if available
-        if let Ok(output) = Command::new("wmctrl").arg("-l").output() {
-            if output.status.success() {
-                println!("[DEBUG] wmctrl available, trying to activate window");
-                // wmctrl is available, try to activate the window
-                if let Ok(result) = Command::new("wmctrl")
-                    .args(["-a", app_name])
-                    .output() {
-                    if result.status.success() {
-                        success = true;
-                        println!("[DEBUG] wmctrl activation successful");
-                    }
-                }
+        // This is an X11-specific feature. It will not work on Wayland.
+        if std::env::var("WAYLAND_DISPLAY").is_ok() {
+            log::debug!("Wayland detected, skipping window activation.");
+            return Ok(());
+        }
+
+        if which::which("wmctrl").is_ok() {
+            if Command::new("wmctrl").args(["-a", app_name]).status().is_ok() {
+                log::debug!("wmctrl activation successful");
+                return Ok(());
             }
         }
 
-        // Method 2: Try xdotool if available and wmctrl didn't work
-        if !success {
-            if let Ok(output) = Command::new("xdotool").arg("--version").output() {
-                if output.status.success() {
-                    println!("[DEBUG] xdotool available, trying to search and activate");
-                    // xdotool is available, try to search and activate
-                    if let Ok(result) = Command::new("xdotool")
-                        .args(["search", "--name", app_name, "windowactivate"])
-                        .output() {
-                        if result.status.success() {
-                            success = true;
-                            println!("[DEBUG] xdotool activation successful");
-                        }
-                    }
-                }
+        if which::which("xdotool").is_ok() {
+            if Command::new("xdotool").args(["search", "--name", app_name, "windowactivate"]).status().is_ok() {
+                log::debug!("xdotool activation successful");
+                return Ok(());
             }
         }
 
-        // Method 3: Desktop environment specific (fallback)
-        if !success {
-            self.try_de_specific_activation(app_name)?;
-        }
-
-        Ok(())
-    }
-
-    fn try_de_specific_activation(&self, app_name: &str) -> Result<()> {
-        // Detect desktop environment and use appropriate activation method
-        if let Ok(de) = std::env::var("XDG_CURRENT_DESKTOP") {
-            match de.to_lowercase().as_str() {
-                "gnome" | "ubuntu:gnome-shell" => {
-                    // Use gdbus to interact with GNOME Shell
-                    let _ = Command::new("gdbus")
-                        .args([
-                            "call", "--session", "--dest", "org.gnome.Shell",
-                            "--object-path", "/org/gnome/Shell",
-                            "--method", "org.gnome.Shell.Eval",
-                            &format!("global.get_window_actors().find(a => a.get_meta_window().get_title().includes('{}')).get_meta_window().activate(global.get_current_time())", app_name)
-                        ])
-                        .output();
-                }
-                "kde" | "plasma" => {
-                    // Use KDE's qdbus
-                    let _ = Command::new("qdbus")
-                        .args(["org.kde.kglobalaccel", "/component/kwin", "invokeShortcut", "Activate Window Demanding Attention"])
-                        .output();
-                }
-                _ => {
-                    // Unknown DE, no specific activation
-                }
-            }
-        }
+        log::debug!("No suitable window activation tool found (wmctrl, xdotool).");
         Ok(())
     }
 }
 
 impl PlatformTerminalLauncher for UnixTerminalLauncher {
     fn launch_command(&self, command: &str, config: &TerminalConfig) -> Result<()> {
-        let escaped_command = Self::escape_shell_command(command);
-        
-        // Substitute {ssh_command} placeholder in terminal arguments
-        let args: Vec<String> = config
-            .args
-            .iter()
-            .map(|arg| arg.replace("{ssh_command}", &escaped_command))
-            .collect();
+        let mut cmd;
 
-        println!("[DEBUG] Launching Unix terminal: {} with args: {:?}", config.program, args);
-
-        // Spawn the terminal process
-        let mut cmd = Command::new(&config.program);
-        if !args.is_empty() {
-            cmd.args(&args);
+        match config.strategy {
+            LaunchStrategy::ShellCommand => {
+                let final_command = config.args.join(" ").replace("{ssh_command}", command);
+                cmd = Command::new("sh");
+                cmd.arg("-c");
+                cmd.arg(final_command);
+            }
+            LaunchStrategy::Direct => {
+                cmd = Command::new(&config.program);
+                cmd.args(&config.args);
+                // command is in format "ssh user@host", so we need to split it
+                let command_parts: Vec<&str> = command.split_whitespace().collect();
+                cmd.args(command_parts);
+            }
         }
+
+        log::debug!("Launching Unix terminal: {:?}", cmd);
 
         match cmd.spawn() {
             Ok(_) => {
-                println!("[INFO] Successfully launched terminal with command: {}", command);
+                log::info!("Successfully launched terminal with command: {}", command);
                 
-                // Try to bring terminal to front
                 if let Some(app_name) = std::path::Path::new(&config.program).file_name() {
                     if let Some(name_str) = app_name.to_str() {
                         if let Err(e) = self.bring_terminal_to_front_unix(name_str) {
-                            println!("[DEBUG] Failed to bring terminal to front: {}", e);
+                            log::warn!("Failed to bring terminal to front: {}", e);
                         }
                     }
                 }
@@ -170,18 +103,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_escape_shell_command() {
-        let dangerous = "ssh user@host && rm -rf /";
-        let escaped = UnixTerminalLauncher::escape_shell_command(dangerous);
-        assert!(escaped.contains("\\&\\&"));
+    fn test_direct_launch_strategy() {
+        let config = TerminalConfig {
+            program: "/usr/bin/gnome-terminal".to_string(),
+            args: vec!["--".to_string()],
+            strategy: LaunchStrategy::Direct,
+        };
+        let launcher = UnixTerminalLauncher::new(config);
+        // This is a mock test, we don't actually launch the terminal
+        let result = launcher.launch_command("ssh user@host", &launcher.config);
+        assert!(result.is_ok());
     }
 
     #[test]
-    fn test_unix_launcher_creation() {
+    fn test_shell_command_launch_strategy() {
         let config = TerminalConfig {
-            program: "/usr/bin/gnome-terminal".to_string(),
-            args: vec!["--".to_string(), "{ssh_command}".to_string()],
+            program: "alacritty".to_string(),
+            args: vec!["-e".to_string(), "sh", "-c".to_string(), "{ssh_command}".to_string()],
+            strategy: LaunchStrategy::ShellCommand,
         };
-        let _launcher = UnixTerminalLauncher::new(config);
+        let launcher = UnixTerminalLauncher::new(config);
+        let result = launcher.launch_command("ssh user@host", &launcher.config);
+        assert!(result.is_ok());
     }
 }

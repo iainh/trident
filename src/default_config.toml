@@ -1,0 +1,62 @@
+# Trident SSH Launcher Configuration
+
+[terminal]
+# Specify your terminal program and how to launch SSH commands
+# Examples for different terminals:
+
+# iTerm2 (default on macOS if detected):
+# program = "/Applications/iTerm.app/Contents/MacOS/iTerm2"
+# args = ["-c", "tell application "iTerm2" to create window with default profile command "{ssh_command}""]
+# strategy = "shellCommand"
+
+# Terminal.app (macOS fallback):
+# program = "/usr/bin/osascript"
+# args = ["-e", "tell app "Terminal" to do script "{ssh_command}""]
+# strategy = "shellCommand"
+
+# Alacritty (common on Linux):
+# program = "alacritty"
+# args = ["-e", "sh", "-c", "{ssh_command}"]
+# strategy = "shellCommand"
+
+# Kitty (common on Linux):
+# program = "kitty"
+# args = ["sh", "-c", "{ssh_command}"]
+# strategy = "shellCommand"
+
+# WezTerm (direct execution example):
+# program = "wezterm"
+# args = ["start"]
+# strategy = "direct"
+
+# GNOME Terminal (direct execution example):
+# program = "gnome-terminal"
+# args = ["--"]
+# strategy = "direct"
+
+[ssh]
+# SSH file locations
+known_hosts_path = "~/.ssh/known_hosts"
+config_path = "~/.ssh/config"
+ssh_binary = "/usr/bin/ssh"
+
+[parsing]
+# What to parse and how
+parse_known_hosts = true
+parse_ssh_config = true
+# Simple parsing only looks at Host entries, ignores Include directives
+simple_config_parsing = true
+# Skip hashed entries in known_hosts (recommended)
+skip_hashed_hosts = true
+
+[ui]
+# User interface settings
+max_results = 20
+case_sensitive = false
+
+[hotkey]
+# Global hotkey to show the launcher window.
+# Uses format: [MODIFIER+]*KEY
+# Modifiers: Alt, Control, Shift, Super (Windows/Cmd key)
+# Example: "Super+Shift+S"
+combination = "Super+Shift+S"

@@ -1,7 +1,7 @@
 // ABOUTME: Terminal launcher for SSH connections using user-configured terminal programs
 // ABOUTME: Provides safe command substitution and process spawning for various terminal applications
 
-use crate::Logger;
+
 use crate::config::TerminalConfig;
 use crate::ssh::parser::HostEntry;
 use anyhow::{Context, Result};
@@ -17,11 +17,11 @@ impl TerminalLauncher {
     }
 
     pub fn launch(&self, host: &HostEntry) -> Result<()> {
-        Logger::debug(&format!("Launching SSH connection to host: {}", host.name));
+        tracing::debug!("Launching SSH connection to host: {}", host.name);
 
         // Escape the SSH command for safe shell execution
         let escaped_command = escape_shell_command(&host.connection_string);
-        Logger::debug(&format!("Escaped SSH command: {escaped_command}"));
+        tracing::debug!("Escaped SSH command: {}", escaped_command);
 
         // Check if we should use macOS 'open' command for app bundles
         if self.should_use_open_command() {
@@ -49,10 +49,10 @@ impl TerminalLauncher {
             .map(|arg| arg.replace("{ssh_command}", escaped_command))
             .collect();
 
-        Logger::debug(&format!(
+        tracing::debug!(
             "Launching terminal with open command: {} with args: {:?}",
             app_name, args
-        ));
+        );
 
         // Build command: open -a "AppName" --args <terminal_args>
         let mut cmd = Command::new("open");
@@ -64,21 +64,21 @@ impl TerminalLauncher {
 
         match cmd.spawn() {
             Ok(_) => {
-                Logger::info(&format!(
+                tracing::info!(
                     "Successfully launched terminal for host: {} (using open command)",
                     host.name
-                ));
+                );
                 Ok(())
             }
             Err(e) => {
-                Logger::error(&format!(
+                tracing::error!(
                     "Failed to launch terminal with open command for host '{}': {}",
                     host.name, e
-                ));
-                Logger::error(&format!("  App name: {}", app_name));
-                Logger::error(&format!("  Terminal args: {args:?}"));
+                );
+                tracing::error!("  App name: {}", app_name);
+                tracing::error!("  Terminal args: {:?}", args);
                 Err(e).with_context(|| {
-                    format!("Failed to launch terminal with open command: {} with args: {:?}", app_name, args)
+                    format!("Failed to launch terminal with open command: {app_name} with args: {args:?}")
                 })
             }
         }
@@ -94,40 +94,38 @@ impl TerminalLauncher {
             .map(|arg| arg.replace("{ssh_command}", escaped_command))
             .collect();
 
-        Logger::debug(&format!(
+        tracing::debug!(
             "Launching terminal: {} with args: {:?}",
             self.config.program, args
-        ));
+        );
 
         // Spawn the terminal process
         match Command::new(&self.config.program).args(&args).spawn() {
             Ok(_) => {
-                Logger::info(&format!(
+                tracing::info!(
                     "Successfully launched terminal for host: {}",
                     host.name
-                ));
+                );
 
                 // Bring the terminal window to front (unless using osascript which handles this)
                 if !self.config.program.contains("osascript") {
                     if let Err(e) = self.bring_terminal_to_front() {
-                        Logger::debug(&format!(
-                            "Failed to bring terminal to front (terminal still launched): {e}"
-                        ));
+                        tracing::debug!(
+                            "Failed to bring terminal to front (terminal still launched): {}",
+                            e
+                        );
                     }
                 }
 
                 Ok(())
             }
             Err(e) => {
-                Logger::error(&format!(
+                tracing::error!(
                     "Failed to launch terminal for host '{}': {}",
                     host.name, e
-                ));
-                Logger::error(&format!("  Terminal program: {}", self.config.program));
-                Logger::error(&format!("  Terminal args: {args:?}"));
-                Logger::error(
-                    "  Check that the terminal program exists and the configuration is correct",
                 );
+                tracing::error!("  Terminal program: {}", self.config.program);
+                tracing::error!("  Terminal args: {:?}", args);
                 Err(e).with_context(|| {
                     format!(
                         "Failed to launch terminal: {} with args: {:?}",
@@ -142,9 +140,9 @@ impl TerminalLauncher {
     fn bring_terminal_to_front(&self) -> Result<()> {
         let app_name = extract_app_name(&self.config.program)?;
         
-        Logger::debug(&format!("Attempting to bring '{}' to front", app_name));
+        tracing::debug!("Attempting to bring '{}' to front", app_name);
 
-        let script = format!("tell application \"{}\" to activate", app_name);
+        let script = format!("tell application \"{app_name}\" to activate");
         
         match Command::new("osascript")
             .args(["-e", &script])
@@ -152,15 +150,15 @@ impl TerminalLauncher {
         {
             Ok(output) => {
                 if output.status.success() {
-                    Logger::debug(&format!("Successfully brought '{}' to front", app_name));
+                    tracing::debug!("Successfully brought '{}' to front", app_name);
                 } else {
                     let stderr = String::from_utf8_lossy(&output.stderr);
-                    Logger::debug(&format!("AppleScript failed to activate '{}': {}", app_name, stderr));
+                    tracing::debug!("AppleScript failed to activate '{}': {}", app_name, stderr);
                 }
                 Ok(())
             }
             Err(e) => {
-                Logger::debug(&format!("Failed to run AppleScript to activate '{}': {}", app_name, e));
+                tracing::debug!("Failed to run AppleScript to activate '{}': {}", app_name, e);
                 Err(e.into())
             }
         }

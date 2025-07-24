@@ -20,7 +20,7 @@ impl MacOSHotkeyManager {
 impl HotkeyManager for MacOSHotkeyManager {
     fn register_hotkey(&mut self, callback: Box<dyn Fn() + Send + Sync>) -> Result<()> {
         // Convert boxed callback to the format expected by NativeHotKeyManager
-        self.native_manager.set_callback(move || callback())?;
+        self.native_manager.set_callback(callback)?;
         self.native_manager.register_cmd_shift_s()
     }
     

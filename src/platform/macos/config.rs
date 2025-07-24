@@ -1,9 +1,9 @@
 // ABOUTME: macOS config detector wrapping existing terminal detection logic
 // ABOUTME: Implements the ConfigDetector trait for macOS platform
 
-use crate::platform::{ConfigDetector, DetectedTerminal, SshPaths, DesktopEnvironment};
+use crate::platform::{ConfigDetector, SshPaths, DesktopEnvironment};
+use crate::config::DetectedTerminal;
 use anyhow::Result;
-use std::path::Path;
 
 // Reuse the existing DetectedTerminal from config.rs temporarily
 // until we fully migrate the detection logic
@@ -26,8 +26,7 @@ impl ConfigDetector for MacOSConfigDetector {
             name: detected.name,
             program: detected.program,
             args: detected.args,
-            desktop_file: None, // macOS doesn't use desktop files
-            detection_paths: vec![], // TODO: Add detection paths
+            strategy: detected.strategy,
         }]
     }
     

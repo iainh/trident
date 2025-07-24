@@ -71,6 +71,7 @@ impl TridentTray {
     }
 
     /// Check for tray icon events and return the event type
+    #[allow(dead_code)]
     pub fn try_recv_tray_event() -> Option<TrayEvent> {
         // Check for tray icon click events
         if let Ok(event) = TrayIconEvent::receiver().try_recv() {
@@ -105,6 +106,7 @@ impl Default for TridentTray {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum TrayEvent {
     Click,
     DoubleClick,

@@ -2,7 +2,7 @@
 // ABOUTME: Enables cross-platform implementation of hotkeys, terminal launching, and config detection
 
 use anyhow::Result;
-use crate::config::TerminalConfig;
+use crate::config::{TerminalConfig, DetectedTerminal};
 use crate::ssh::HostEntry;
 
 #[cfg(target_os = "macos")]
@@ -11,6 +11,7 @@ pub mod macos;
 pub mod unix;
 
 /// Platform capabilities detection and feature support
+#[allow(dead_code)]
 pub trait PlatformCapabilities {
     /// Detect the current display server (X11, Wayland, etc.)
     fn detect_display_server(&self) -> DisplayServer;
@@ -27,6 +28,7 @@ pub trait PlatformCapabilities {
 
 /// Display server types for Unix systems
 #[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
 pub enum DisplayServer {
     X11,
     Wayland,
@@ -35,6 +37,7 @@ pub enum DisplayServer {
 
 /// Hotkey implementation methods
 #[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
 pub enum HotkeyMethod {
     Native,      // macOS NSEvent
     X11Global,   // X11 XGrabKey
@@ -43,6 +46,7 @@ pub enum HotkeyMethod {
 }
 
 /// Global hotkey management trait
+#[allow(dead_code)]
 pub trait HotkeyManager {
     /// Register a global hotkey with a callback
     fn register_hotkey(&mut self, callback: Box<dyn Fn() + Send + Sync>) -> Result<()>;
@@ -64,6 +68,7 @@ pub trait HotkeyManager {
 }
 
 /// Terminal launching trait
+#[allow(dead_code)]
 pub trait TerminalLauncher {
     /// Launch a command in the configured terminal
     fn launch_command(&self, command: &str, config: &TerminalConfig) -> Result<()>;
@@ -76,6 +81,7 @@ pub trait TerminalLauncher {
 }
 
 /// Terminal and configuration detection trait
+#[allow(dead_code)]
 pub trait ConfigDetector {
     /// Detect available terminals on the system
     fn detect_terminals(&self) -> Vec<DetectedTerminal>;
@@ -90,15 +96,7 @@ pub trait ConfigDetector {
     fn handle_desktop_environment(&self, de: &DesktopEnvironment) -> Result<()>;
 }
 
-/// Detected terminal information
-#[derive(Debug, Clone, PartialEq)]
-pub struct DetectedTerminal {
-    pub name: String,
-    pub program: String,
-    pub args: Vec<String>,
-    pub desktop_file: Option<String>,
-    pub detection_paths: Vec<String>,
-}
+
 
 /// SSH file paths for the platform
 #[derive(Debug, Clone, PartialEq)]
@@ -110,6 +108,7 @@ pub struct SshPaths {
 
 /// Desktop environments for Unix systems
 #[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
 pub enum DesktopEnvironment {
     Gnome,
     Kde,
@@ -136,11 +135,13 @@ impl Platform {
     
     /// Get the platform-specific terminal launcher
     #[cfg(target_os = "macos")]
+    #[allow(dead_code)]
     pub fn terminal_launcher(config: TerminalConfig) -> Box<dyn TerminalLauncher> {
         Box::new(macos::MacOSTerminalLauncher::new(config))
     }
     
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    #[allow(dead_code)]
     pub fn terminal_launcher(config: TerminalConfig) -> Box<dyn TerminalLauncher> {
         Box::new(unix::UnixTerminalLauncher::new(config))
     }
