@@ -1,8 +1,8 @@
 // ABOUTME: macOS config detector wrapping existing terminal detection logic
 // ABOUTME: Implements the ConfigDetector trait for macOS platform
 
-use crate::platform::{ConfigDetector, SshPaths, DesktopEnvironment};
 use crate::config::DetectedTerminal;
+use crate::platform::{ConfigDetector, DesktopEnvironment, SshPaths};
 use anyhow::Result;
 
 // Reuse the existing DetectedTerminal from config.rs temporarily
@@ -21,7 +21,7 @@ impl ConfigDetector for MacOSConfigDetector {
     fn detect_terminals(&self) -> Vec<DetectedTerminal> {
         // Convert from existing detection logic
         let detected = Config::detect_best_terminal();
-        
+
         vec![DetectedTerminal {
             name: detected.name,
             program: detected.program,
@@ -29,7 +29,7 @@ impl ConfigDetector for MacOSConfigDetector {
             strategy: detected.strategy,
         }]
     }
-    
+
     fn get_default_ssh_paths(&self) -> SshPaths {
         SshPaths {
             known_hosts_path: "~/.ssh/known_hosts".to_string(),
@@ -37,15 +37,14 @@ impl ConfigDetector for MacOSConfigDetector {
             ssh_binary: "/usr/bin/ssh".to_string(),
         }
     }
-    
+
     fn detect_via_desktop_files(&self) -> Vec<DetectedTerminal> {
         // macOS doesn't use desktop files
         vec![]
     }
-    
+
     fn handle_desktop_environment(&self, _de: &DesktopEnvironment) -> Result<()> {
         // macOS doesn't have multiple desktop environments
         Ok(())
     }
 }
-

@@ -1,7 +1,6 @@
 // ABOUTME: Terminal launcher for SSH connections using user-configured terminal programs
 // ABOUTME: Provides safe command substitution and process spawning for various terminal applications
 
-
 use crate::config::TerminalConfig;
 use crate::ssh::parser::HostEntry;
 use anyhow::{Context, Result};
@@ -40,7 +39,7 @@ impl TerminalLauncher {
     /// Launch using macOS 'open' command (automatically brings app to foreground)
     fn launch_with_open_command(&self, escaped_command: &str, host: &HostEntry) -> Result<()> {
         let app_name = extract_app_name(&self.config.program)?;
-        
+
         // Substitute {ssh_command} placeholder in terminal arguments
         let args: Vec<String> = self
             .config
@@ -51,7 +50,8 @@ impl TerminalLauncher {
 
         tracing::debug!(
             "Launching terminal with open command: {} with args: {:?}",
-            app_name, args
+            app_name,
+            args
         );
 
         // Build command: open -a "AppName" --args <terminal_args>
@@ -73,7 +73,8 @@ impl TerminalLauncher {
             Err(e) => {
                 tracing::error!(
                     "Failed to launch terminal with open command for host '{}': {}",
-                    host.name, e
+                    host.name,
+                    e
                 );
                 tracing::error!("  App name: {}", app_name);
                 tracing::error!("  Terminal args: {:?}", args);
@@ -96,16 +97,14 @@ impl TerminalLauncher {
 
         tracing::debug!(
             "Launching terminal: {} with args: {:?}",
-            self.config.program, args
+            self.config.program,
+            args
         );
 
         // Spawn the terminal process
         match Command::new(&self.config.program).args(&args).spawn() {
             Ok(_) => {
-                tracing::info!(
-                    "Successfully launched terminal for host: {}",
-                    host.name
-                );
+                tracing::info!("Successfully launched terminal for host: {}", host.name);
 
                 // Bring the terminal window to front (unless using osascript which handles this)
                 if !self.config.program.contains("osascript") {
@@ -120,10 +119,7 @@ impl TerminalLauncher {
                 Ok(())
             }
             Err(e) => {
-                tracing::error!(
-                    "Failed to launch terminal for host '{}': {}",
-                    host.name, e
-                );
+                tracing::error!("Failed to launch terminal for host '{}': {}", host.name, e);
                 tracing::error!("  Terminal program: {}", self.config.program);
                 tracing::error!("  Terminal args: {:?}", args);
                 Err(e).with_context(|| {
@@ -139,15 +135,12 @@ impl TerminalLauncher {
     /// Bring the terminal application to front using AppleScript
     fn bring_terminal_to_front(&self) -> Result<()> {
         let app_name = extract_app_name(&self.config.program)?;
-        
+
         tracing::debug!("Attempting to bring '{}' to front", app_name);
 
         let script = format!("tell application \"{app_name}\" to activate");
-        
-        match Command::new("osascript")
-            .args(["-e", &script])
-            .output()
-        {
+
+        match Command::new("osascript").args(["-e", &script]).output() {
             Ok(output) => {
                 if output.status.success() {
                     tracing::debug!("Successfully brought '{}' to front", app_name);
@@ -158,7 +151,11 @@ impl TerminalLauncher {
                 Ok(())
             }
             Err(e) => {
-                tracing::debug!("Failed to run AppleScript to activate '{}': {}", app_name, e);
+                tracing::debug!(
+                    "Failed to run AppleScript to activate '{}': {}",
+                    app_name,
+                    e
+                );
                 Err(e.into())
             }
         }
@@ -173,36 +170,36 @@ fn extract_app_name(program_path: &str) -> Result<String> {
         let app_path = &program_path[..app_bundle_end + 4]; // Include ".app"
         let start = app_path.rfind('/').map(|i| i + 1).unwrap_or(0);
         let app_name = &app_path[start..];
-        
+
         // Remove .app suffix to get clean name
         let clean_name = app_name.strip_suffix(".app").unwrap_or(app_name);
-        
+
         // Handle special case for Ghostty (lowercase process name)
         let final_name = if clean_name.eq_ignore_ascii_case("ghostty") {
             "ghostty"
         } else {
             clean_name
         };
-            
+
         return Ok(final_name.to_string());
     }
-    
+
     // For non-standard paths, try to extract from the final component
     if let Some(last_slash) = program_path.rfind('/') {
         let binary_name = &program_path[last_slash + 1..];
         let lower_name = binary_name.to_lowercase();
-        
+
         // Map common terminal binary names to application names
         let app_name = match lower_name.as_str() {
             "iterm2" => "iTerm2",
-            "alacritty" => "Alacritty", 
+            "alacritty" => "Alacritty",
             "kitty" => "kitty",
             "ghostty" => "ghostty", // Note: lowercase for process name
             "wezterm" => "WezTerm",
             "hyper" => "Hyper",
             _ => binary_name, // Use original case for unknown binaries
         };
-        
+
         Ok(app_name.to_string())
     } else {
         // Fallback: use the program path as-is
@@ -358,16 +355,25 @@ mod tests {
     #[test]
     fn test_extract_app_name_from_binary_name() {
         assert_eq!(extract_app_name("/usr/bin/iterm2").unwrap(), "iTerm2");
-        assert_eq!(extract_app_name("/usr/local/bin/alacritty").unwrap(), "Alacritty");
+        assert_eq!(
+            extract_app_name("/usr/local/bin/alacritty").unwrap(),
+            "Alacritty"
+        );
         assert_eq!(extract_app_name("/opt/bin/kitty").unwrap(), "kitty");
         assert_eq!(extract_app_name("/usr/bin/ghostty").unwrap(), "ghostty");
-        assert_eq!(extract_app_name("/Applications/WezTerm.app/Contents/MacOS/wezterm").unwrap(), "WezTerm");
+        assert_eq!(
+            extract_app_name("/Applications/WezTerm.app/Contents/MacOS/wezterm").unwrap(),
+            "WezTerm"
+        );
     }
 
     #[test]
     fn test_extract_app_name_fallback() {
         assert_eq!(extract_app_name("some-terminal").unwrap(), "some-terminal");
-        assert_eq!(extract_app_name("/custom/path/custom-term").unwrap(), "custom-term");
+        assert_eq!(
+            extract_app_name("/custom/path/custom-term").unwrap(),
+            "custom-term"
+        );
     }
 
     #[test]
@@ -391,7 +397,10 @@ mod tests {
         // Should NOT use open for osascript (even though it's for an app)
         let config3 = TerminalConfig {
             program: "/usr/bin/osascript".to_string(),
-            args: vec!["-e".to_string(), "tell app \"Terminal\" to do script \"{ssh_command}\"".to_string()],
+            args: vec![
+                "-e".to_string(),
+                "tell app \"Terminal\" to do script \"{ssh_command}\"".to_string(),
+            ],
         };
         let launcher3 = TerminalLauncher::new(config3);
         assert!(!launcher3.should_use_open_command());

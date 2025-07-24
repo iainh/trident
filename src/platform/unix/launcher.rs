@@ -1,8 +1,8 @@
 // ABOUTME: Unix terminal launcher supporting various Linux/FreeBSD terminals
 // ABOUTME: Handles terminal detection, launching, and desktop environment integration
 
+use crate::config::{LaunchStrategy, TerminalConfig};
 use crate::platform::TerminalLauncher as PlatformTerminalLauncher;
-use crate::config::{TerminalConfig, LaunchStrategy};
 use crate::ssh::HostEntry;
 use anyhow::{Result, anyhow};
 use std::process::Command;
@@ -18,7 +18,7 @@ impl UnixTerminalLauncher {
 
     fn bring_terminal_to_front_unix(&self, app_name: &str) -> Result<()> {
         tracing::debug!("Attempting to bring terminal '{}' to front", app_name);
-        
+
         // This is an X11-specific feature. It will not work on Wayland.
         if std::env::var("WAYLAND_DISPLAY").is_ok() {
             log::debug!("Wayland detected, skipping window activation.");
@@ -26,14 +26,22 @@ impl UnixTerminalLauncher {
         }
 
         if which::which("wmctrl").is_ok() {
-            if Command::new("wmctrl").args(["-a", app_name]).status().is_ok() {
+            if Command::new("wmctrl")
+                .args(["-a", app_name])
+                .status()
+                .is_ok()
+            {
                 log::debug!("wmctrl activation successful");
                 return Ok(());
             }
         }
 
         if which::which("xdotool").is_ok() {
-            if Command::new("xdotool").args(["search", "--name", app_name, "windowactivate"]).status().is_ok() {
+            if Command::new("xdotool")
+                .args(["search", "--name", app_name, "windowactivate"])
+                .status()
+                .is_ok()
+            {
                 log::debug!("xdotool activation successful");
                 return Ok(());
             }
@@ -69,7 +77,7 @@ impl PlatformTerminalLauncher for UnixTerminalLauncher {
         match cmd.spawn() {
             Ok(_) => {
                 log::info!("Successfully launched terminal with command: {}", command);
-                
+
                 if let Some(app_name) = std::path::Path::new(&config.program).file_name() {
                     if let Some(name_str) = app_name.to_str() {
                         if let Err(e) = self.bring_terminal_to_front_unix(name_str) {
@@ -77,15 +85,15 @@ impl PlatformTerminalLauncher for UnixTerminalLauncher {
                         }
                     }
                 }
-                
+
                 Ok(())
             }
-            Err(e) => {
-                Err(anyhow!(
-                    "Failed to launch terminal '{}' with command '{}': {}",
-                    config.program, command, e
-                ))
-            }
+            Err(e) => Err(anyhow!(
+                "Failed to launch terminal '{}' with command '{}': {}",
+                config.program,
+                command,
+                e
+            )),
         }
     }
 
@@ -119,7 +127,12 @@ mod tests {
     fn test_shell_command_launch_strategy() {
         let config = TerminalConfig {
             program: "alacritty".to_string(),
-            args: vec!["-e".to_string(), "sh", "-c".to_string(), "{ssh_command}".to_string()],
+            args: vec![
+                "-e".to_string(),
+                "sh",
+                "-c".to_string(),
+                "{ssh_command}".to_string(),
+            ],
             strategy: LaunchStrategy::ShellCommand,
         };
         let launcher = UnixTerminalLauncher::new(config);

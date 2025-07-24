@@ -11,14 +11,14 @@ mod ui;
 
 use anyhow::Result;
 use app::AppState;
-use config::{Config};
+use config::Config;
 use gpui::*;
 use platform::Platform;
 use ssh::{HostEntry, TerminalLauncher, parse_known_hosts, parse_ssh_config};
 use std::path::Path;
-use ui::{HostList, SearchInput};
+use tracing::{Level, error, info, warn};
 use tracing_subscriber::FmtSubscriber;
-use tracing::{info, warn, error, Level};
+use ui::{HostList, SearchInput};
 
 actions!(trident, [ShowLauncher, QuitApp, ToggleLauncher]);
 
@@ -167,7 +167,10 @@ impl TridentApp {
         if !config_path.exists() {
             Config::save_generated_config(&config_path)
                 .map_err(|e| anyhow::anyhow!("Failed to create configuration file: {}", e))?;
-            info!("Created configuration with auto-detected terminal at: {}", config_path.display());
+            info!(
+                "Created configuration with auto-detected terminal at: {}",
+                config_path.display()
+            );
         }
 
         Config::load_from_file(&config_path)
@@ -179,7 +182,10 @@ impl TridentApp {
         if config.parsing.parse_known_hosts {
             let known_hosts_path = Path::new(&config.ssh.known_hosts_path);
             if !known_hosts_path.exists() {
-                warn!("known_hosts file '{}' not found. Skipping known_hosts parsing.", config.ssh.known_hosts_path);
+                warn!(
+                    "known_hosts file '{}' not found. Skipping known_hosts parsing.",
+                    config.ssh.known_hosts_path
+                );
             } else {
                 match parse_known_hosts(known_hosts_path, config.parsing.skip_hashed_hosts) {
                     Ok(hosts) => all_hosts.extend(hosts),
@@ -191,7 +197,10 @@ impl TridentApp {
         if config.parsing.parse_ssh_config {
             let ssh_config_path = Path::new(&config.ssh.config_path);
             if !ssh_config_path.exists() {
-                warn!("SSH config file '{}' not found. Skipping SSH config parsing.", config.ssh.config_path);
+                warn!(
+                    "SSH config file '{}' not found. Skipping SSH config parsing.",
+                    config.ssh.config_path
+                );
             } else {
                 match parse_ssh_config(ssh_config_path, config.parsing.simple_config_parsing) {
                     Ok(hosts) => all_hosts.extend(hosts),
@@ -205,15 +214,21 @@ impl TridentApp {
 
         if all_hosts.is_empty() {
             warn!("No SSH hosts found, using examples");
-            vec![
-                HostEntry::new("example.com".to_string(), "ssh user@example.com".to_string()),
-            ]
+            vec![HostEntry::new(
+                "example.com".to_string(),
+                "ssh user@example.com".to_string(),
+            )]
         } else {
             all_hosts
         }
     }
 
-    fn handle_key_event(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+    fn handle_key_event(
+        &mut self,
+        event: &KeyDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         match event.keystroke.key.as_str() {
             "up" => {
                 self.host_list.select_previous();
@@ -327,14 +342,19 @@ fn run_menubar_app() -> Result<()> {
     Application::new().run(|cx: &mut App| {
         let _config = TridentApp::load_config().unwrap_or_default();
 
-        cx.set_global(TridentState { launcher_window: None });
+        cx.set_global(TridentState {
+            launcher_window: None,
+        });
 
         cx.observe_global::<TridentState>(move |cx| {
-            if cx.global::<TridentState>().launcher_window.is_none() && GLOBAL_HOTKEY_TRIGGERED.load(Ordering::SeqCst) {
+            if cx.global::<TridentState>().launcher_window.is_none()
+                && GLOBAL_HOTKEY_TRIGGERED.load(Ordering::SeqCst)
+            {
                 GLOBAL_HOTKEY_TRIGGERED.store(false, Ordering::SeqCst);
                 show_launcher_window(cx);
             }
-        }).detach();
+        })
+        .detach();
 
         let mut hotkey_manager = Platform::hotkey_manager();
         let hotkey_callback = move || {
@@ -367,7 +387,9 @@ fn show_launcher_window(cx: &mut App) {
         return;
     }
 
-    let display_bounds = cx.primary_display().map_or(Bounds::default(), |d| d.bounds());
+    let display_bounds = cx
+        .primary_display()
+        .map_or(Bounds::default(), |d| d.bounds());
     let window = cx.open_window(
         WindowOptions {
             titlebar: None,

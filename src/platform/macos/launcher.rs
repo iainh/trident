@@ -1,10 +1,10 @@
 // ABOUTME: macOS terminal launcher implementation using existing launcher functionality
 // ABOUTME: Wraps the existing TerminalLauncher in the platform abstraction trait
 
-use crate::platform::TerminalLauncher as PlatformTerminalLauncher;
-use crate::ssh::launcher::TerminalLauncher as ExistingTerminalLauncher;
 use crate::config::TerminalConfig;
+use crate::platform::TerminalLauncher as PlatformTerminalLauncher;
 use crate::ssh::HostEntry;
+use crate::ssh::launcher::TerminalLauncher as ExistingTerminalLauncher;
 use anyhow::Result;
 
 pub struct MacOSTerminalLauncher {
@@ -27,17 +27,15 @@ impl PlatformTerminalLauncher for MacOSTerminalLauncher {
         let temp_launcher = ExistingTerminalLauncher::new(config.clone());
         temp_launcher.launch(&host)
     }
-    
+
     fn bring_to_front(&self, app_name: &str) -> Result<()> {
         // Use AppleScript to bring app to front
         use std::process::Command;
         let script = format!("tell application \"{app_name}\" to activate");
-        Command::new("osascript")
-            .args(["-e", &script])
-            .output()?;
+        Command::new("osascript").args(["-e", &script]).output()?;
         Ok(())
     }
-    
+
     fn launch_host(&self, host: &HostEntry) -> Result<()> {
         self.launcher.launch(host)
     }

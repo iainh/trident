@@ -1,15 +1,15 @@
 // ABOUTME: Unix platform implementations for Linux and FreeBSD support
 // ABOUTME: Provides X11/Wayland hotkey management, Unix terminal detection, and desktop integration
 
+pub mod config;
 pub mod hotkey;
 pub mod launcher;
-pub mod config;
 
+pub use config::UnixConfigDetector;
 pub use hotkey::UnixHotkeyManager;
 pub use launcher::UnixTerminalLauncher;
-pub use config::UnixConfigDetector;
 
-use super::{PlatformCapabilities, DisplayServer, HotkeyMethod};
+use super::{DisplayServer, HotkeyMethod, PlatformCapabilities};
 
 pub struct UnixPlatform;
 
@@ -24,7 +24,7 @@ impl PlatformCapabilities for UnixPlatform {
             DisplayServer::Unknown
         }
     }
-    
+
     fn supports_global_hotkeys(&self) -> bool {
         match self.detect_display_server() {
             DisplayServer::X11 => true,
@@ -32,14 +32,14 @@ impl PlatformCapabilities for UnixPlatform {
             DisplayServer::Unknown => false,
         }
     }
-    
+
     fn requires_compositor_integration(&self) -> bool {
         match self.detect_display_server() {
             DisplayServer::Wayland => true,
             _ => false,
         }
     }
-    
+
     fn get_preferred_hotkey_method(&self) -> HotkeyMethod {
         match self.detect_display_server() {
             DisplayServer::X11 => HotkeyMethod::X11Global,

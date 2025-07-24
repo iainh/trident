@@ -129,10 +129,16 @@ impl Config {
 
         let mut content = String::new();
         content.push_str("# Trident SSH Launcher Configuration\n");
-        content.push_str(&format!("# Generated automatically with detected terminal: {}\n", terminal_config.name));
+        content.push_str(&format!(
+            "# Generated automatically with detected terminal: {}\n",
+            terminal_config.name
+        ));
         content.push_str("\n[terminal]\n");
         content.push_str(&format!("program = \"{}\"\n", terminal_config.program));
-        content.push_str(&format!("args = {}\n", Self::format_args_for_toml(&terminal_config.args)));
+        content.push_str(&format!(
+            "args = {}\n",
+            Self::format_args_for_toml(&terminal_config.args)
+        ));
         content.push_str(&format!("strategy = \"{strategy_str}\"\n"));
         content.push_str(&Self::generate_terminal_examples(&terminal_config.name));
         content.push_str("\n[ssh]\n");
@@ -151,8 +157,6 @@ impl Config {
         content.push_str("combination = \"Super+Shift+S\"\n");
         content
     }
-
-    
 
     pub fn load_from_str(content: &str) -> Result<Self> {
         toml::from_str(content).context("Failed to parse configuration")
@@ -243,10 +247,7 @@ impl Config {
             }
 
             if self.parsing.parse_ssh_config && !Path::new(&self.ssh.config_path).exists() {
-                tracing::warn!(
-                    "SSH config file '{}' does not exist.",
-                    self.ssh.config_path
-                );
+                tracing::warn!("SSH config file '{}' does not exist.", self.ssh.config_path);
             }
         }
 
@@ -255,8 +256,9 @@ impl Config {
 
     pub fn save_generated_config(path: &Path) -> Result<()> {
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("Failed to create config directory: {}", parent.display()))?;
+            fs::create_dir_all(parent).with_context(|| {
+                format!("Failed to create config directory: {}", parent.display())
+            })?;
         }
 
         fs::write(path, Self::generate_default_config())
@@ -266,8 +268,11 @@ impl Config {
     }
 
     pub fn detect_best_terminal() -> DetectedTerminal {
-        crate::platform::Platform::config_detector().detect_terminals().into_iter().next().unwrap_or_else(|| {
-            DetectedTerminal {
+        crate::platform::Platform::config_detector()
+            .detect_terminals()
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| DetectedTerminal {
                 name: "Terminal.app".to_string(),
                 program: "/usr/bin/osascript".to_string(),
                 args: vec![
@@ -275,8 +280,7 @@ impl Config {
                     "tell app \"Terminal\" to do script \"{ssh_command}\"".to_string(),
                 ],
                 strategy: LaunchStrategy::ShellCommand,
-            }
-        })
+            })
     }
 
     fn format_args_for_toml(args: &[String]) -> String {

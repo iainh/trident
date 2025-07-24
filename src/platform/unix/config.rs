@@ -2,11 +2,11 @@
 // ABOUTME: Supports desktop file parsing, package manager detection, and XDG compliance
 
 use crate::config::{DetectedTerminal, LaunchStrategy};
-use crate::platform::{ConfigDetector, SshPaths, DesktopEnvironment};
+use crate::platform::{ConfigDetector, DesktopEnvironment, SshPaths};
 use anyhow::Result;
-use std::path::{Path, PathBuf};
-use std::fs;
 use std::collections::HashSet;
+use std::fs;
+use std::path::{Path, PathBuf};
 use which::which;
 
 pub struct UnixConfigDetector;
@@ -64,7 +64,7 @@ impl UnixConfigDetector {
 
                 let name = desktop_entry.name(None)?.to_string();
                 let exec = desktop_entry.exec()?.to_string();
-                
+
                 let exec_clean = exec.split(' ').next().unwrap_or("");
                 if exec_clean.is_empty() {
                     return None;
@@ -89,12 +89,29 @@ impl UnixConfigDetector {
 
     fn is_terminal_application(name: &str, exec: &str, program: &str) -> bool {
         let terminal_keywords = [
-            "terminal", "console", "term", "shell", "prompt",
-            "gnome-terminal", "konsole", "xfce4-terminal", "alacritty",
-            "kitty", "wezterm", "tilix", "terminator", "urxvt", "rxvt",
-            "xterm", "eterm", "aterm", "hyper", "terminus", "tabby"
+            "terminal",
+            "console",
+            "term",
+            "shell",
+            "prompt",
+            "gnome-terminal",
+            "konsole",
+            "xfce4-terminal",
+            "alacritty",
+            "kitty",
+            "wezterm",
+            "tilix",
+            "terminator",
+            "urxvt",
+            "rxvt",
+            "xterm",
+            "eterm",
+            "aterm",
+            "hyper",
+            "terminus",
+            "tabby",
         ];
-        
+
         terminal_keywords.iter().any(|keyword| {
             name.contains(keyword) || exec.contains(keyword) || program.contains(keyword)
         })
@@ -102,7 +119,7 @@ impl UnixConfigDetector {
 
     fn get_terminal_args_and_strategy(program: &str) -> (Vec<String>, LaunchStrategy) {
         let lower_program = program.to_lowercase();
-        
+
         match lower_program.as_str() {
             p if p.contains("gnome-terminal") => (vec!["--".to_string()], LaunchStrategy::Direct),
             p if p.contains("konsole") => (vec!["-e".to_string()], LaunchStrategy::Direct),
@@ -110,12 +127,45 @@ impl UnixConfigDetector {
             p if p.contains("tilix") => (vec!["-e".to_string()], LaunchStrategy::Direct),
             p if p.contains("terminator") => (vec!["-e".to_string()], LaunchStrategy::Direct),
             p if p.contains("wezterm") => (vec!["start".to_string()], LaunchStrategy::Direct),
-            p if p.contains("alacritty") => (vec!["-e".to_string(), "sh", "-c".to_string(), "{ssh_command}".to_string()], LaunchStrategy::ShellCommand),
-            p if p.contains("kitty") => (vec!["sh", "-c".to_string(), "{ssh_command}".to_string()], LaunchStrategy::ShellCommand),
-            p if p.contains("hyper") => (vec!["-e".to_string(), "{ssh_command}".to_string()], LaunchStrategy::ShellCommand),
-            p if p.contains("tabby") => (vec!["run".to_string(), "{ssh_command}".to_string()], LaunchStrategy::ShellCommand),
-            p if p.contains("urxvt") || p.contains("rxvt") => (vec!["-e".to_string(), "sh", "-c".to_string(), "{ssh_command}".to_string()], LaunchStrategy::ShellCommand),
-            p if p.contains("xterm") => (vec!["-e".to_string(), "sh", "-c".to_string(), "{ssh_command}".to_string()], LaunchStrategy::ShellCommand),
+            p if p.contains("alacritty") => (
+                vec![
+                    "-e".to_string(),
+                    "sh",
+                    "-c".to_string(),
+                    "{ssh_command}".to_string(),
+                ],
+                LaunchStrategy::ShellCommand,
+            ),
+            p if p.contains("kitty") => (
+                vec!["sh", "-c".to_string(), "{ssh_command}".to_string()],
+                LaunchStrategy::ShellCommand,
+            ),
+            p if p.contains("hyper") => (
+                vec!["-e".to_string(), "{ssh_command}".to_string()],
+                LaunchStrategy::ShellCommand,
+            ),
+            p if p.contains("tabby") => (
+                vec!["run".to_string(), "{ssh_command}".to_string()],
+                LaunchStrategy::ShellCommand,
+            ),
+            p if p.contains("urxvt") || p.contains("rxvt") => (
+                vec![
+                    "-e".to_string(),
+                    "sh",
+                    "-c".to_string(),
+                    "{ssh_command}".to_string(),
+                ],
+                LaunchStrategy::ShellCommand,
+            ),
+            p if p.contains("xterm") => (
+                vec![
+                    "-e".to_string(),
+                    "sh",
+                    "-c".to_string(),
+                    "{ssh_command}".to_string(),
+                ],
+                LaunchStrategy::ShellCommand,
+            ),
             _ => (vec!["-e".to_string()], LaunchStrategy::Direct), // Generic fallback
         }
     }
@@ -142,7 +192,12 @@ impl UnixConfigDetector {
             DetectedTerminal {
                 name: "Alacritty".to_string(),
                 program: "alacritty".to_string(),
-                args: vec!["-e".to_string(), "sh", "-c".to_string(), "{ssh_command}".to_string()],
+                args: vec![
+                    "-e".to_string(),
+                    "sh",
+                    "-c".to_string(),
+                    "{ssh_command}".to_string(),
+                ],
                 strategy: LaunchStrategy::ShellCommand,
             },
             DetectedTerminal {
@@ -240,7 +295,8 @@ impl ConfigDetector for UnixConfigDetector {
     }
 
     fn get_default_ssh_paths(&self) -> SshPaths {
-        let ssh_binary = which("ssh").map_or_else(|_| "ssh".to_string(), |p| p.to_string_lossy().into_owned());
+        let ssh_binary =
+            which("ssh").map_or_else(|_| "ssh".to_string(), |p| p.to_string_lossy().into_owned());
 
         SshPaths {
             known_hosts_path: "~/.ssh/known_hosts".to_string(),
@@ -251,7 +307,7 @@ impl ConfigDetector for UnixConfigDetector {
 
     fn detect_via_desktop_files(&self) -> Vec<DetectedTerminal> {
         let mut detected = Vec::new();
-        
+
         for apps_dir in Self::get_desktop_file_paths() {
             if let Ok(entries) = fs::read_dir(&apps_dir) {
                 for entry in entries {
@@ -259,13 +315,18 @@ impl ConfigDetector for UnixConfigDetector {
                         Ok(entry) => {
                             if let Some(ext) = entry.path().extension() {
                                 if ext == "desktop" {
-                                    if let Some(terminal) = Self::parse_desktop_file(&entry.path()) {
+                                    if let Some(terminal) = Self::parse_desktop_file(&entry.path())
+                                    {
                                         detected.push(terminal);
                                     }
                                 }
                             }
                         }
-                        Err(e) => tracing::warn!("Failed to read directory entry in {}: {}", apps_dir.display(), e),
+                        Err(e) => tracing::warn!(
+                            "Failed to read directory entry in {}: {}",
+                            apps_dir.display(),
+                            e
+                        ),
                     }
                 }
             }
@@ -280,7 +341,7 @@ impl ConfigDetector for UnixConfigDetector {
                 tracing::info!("Detected GNOME desktop environment");
             }
             DesktopEnvironment::Kde => {
-                tracing::info!("Detected KDE desktop environment"); 
+                tracing::info!("Detected KDE desktop environment");
             }
             DesktopEnvironment::Xfce => {
                 tracing::info!("Detected XFCE desktop environment");
@@ -316,7 +377,7 @@ mod tests {
     fn test_common_terminals_list() {
         let terminals = UnixConfigDetector::get_common_unix_terminals();
         assert!(!terminals.is_empty());
-        
+
         assert!(terminals.iter().any(|t| t.name == "GNOME Terminal"));
     }
 }
