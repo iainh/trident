@@ -56,6 +56,8 @@
           cargo-outdated
           pkg-config
           openssl
+          # GitHub CLI for repository management
+          gh
           # QEMU for VM testing
           qemu
         ] ++ darwinDeps ++ linuxDeps;
@@ -319,6 +321,12 @@
             echo "  cargo audit          - Security audit"
             echo "  cargo outdated       - Check for outdated dependencies"
             echo "  ./build-app.sh       - Build macOS .app bundle"
+            echo ""
+            echo "GitHub commands:"
+            echo "  gh pr create         - Create a pull request"
+            echo "  gh pr status         - Show pull request status"
+            echo "  gh issue create      - Create an issue"
+            echo "  gh repo view         - View repository details"
             echo ""
             echo "Nix commands:"
             echo "  nix build            - Build .app bundle"

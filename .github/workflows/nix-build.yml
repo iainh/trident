@@ -1,0 +1,121 @@
+name: Nix Build and QA
+
+on:
+  push:
+    branches: [ main, linux-refactoring ]
+  pull_request:
+    branches: [ main, linux-refactoring ]
+  workflow_dispatch:
+
+jobs:
+  nix-flake-check:
+    name: Nix Flake Quality Assurance
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Nix
+      uses: cachix/install-nix-action@v27
+      with:
+        github_access_token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Setup Cachix
+      uses: cachix/cachix-action@v15
+      with:
+        name: nix-community
+        authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+        
+    - name: Run Nix flake check
+      run: nix flake check --verbose
+      
+    - name: Build Linux package
+      run: |
+        nix build .#packages.x86_64-linux.linux --verbose
+        ls -la result*
+        
+    - name: Run individual QA checks
+      run: |
+        echo "=== Running Tests ==="
+        nix run .#packages.x86_64-linux.test
+        
+        echo "=== Running Clippy ==="
+        nix run .#packages.x86_64-linux.clippy
+        
+        echo "=== Checking Formatting ==="
+        nix run .#packages.x86_64-linux.fmt-check
+        
+        echo "=== Security Audit ==="
+        nix run .#packages.x86_64-linux.audit
+        
+        echo "=== Dependency Check ==="
+        nix run .#packages.x86_64-linux.deny
+        
+        echo "=== Build Verification ==="
+        nix run .#packages.x86_64-linux.build-check
+
+  nix-cross-platform:
+    name: Cross-platform Nix Build
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Nix
+      uses: cachix/install-nix-action@v27
+      with:
+        github_access_token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Setup Cachix
+      uses: cachix/cachix-action@v15
+      with:
+        name: nix-community
+        authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+        
+    - name: Build for current platform
+      run: |
+        nix build --verbose
+        ls -la result*
+        
+    - name: Run development shell test
+      run: |
+        nix develop --command bash -c "
+          echo 'Testing development environment...'
+          rustc --version
+          cargo --version
+          which gh
+          echo 'Development environment OK'
+        "
+
+  create-release:
+    name: Create Release Artifacts
+    runs-on: ubuntu-latest
+    needs: [nix-flake-check]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Nix
+      uses: cachix/install-nix-action@v27
+      with:
+        github_access_token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Build Linux binary
+      run: |
+        nix run .#packages.x86_64-linux.linux
+        cp target/release/trident trident-linux-x86_64
+        
+    - name: Upload release artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: trident-release-linux-${{ github.sha }}
+        path: trident-linux-x86_64
+        retention-days: 90
