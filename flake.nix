@@ -126,6 +126,13 @@
           text = ''
             set -e
             echo "🧪 Running Trident tests..."
+            
+            # Set PKG_CONFIG_PATH for Linux builds
+            ${pkgs.lib.optionalString pkgs.stdenv.isLinux ''
+              export PKG_CONFIG_PATH="${pkgs.lib.makeSearchPath "lib/pkgconfig" linuxDeps}:$PKG_CONFIG_PATH"
+              echo "PKG_CONFIG_PATH set for Linux: $PKG_CONFIG_PATH"
+            ''}
+            
             cargo test --all-features
             echo "✅ All tests passed!"
           '';
@@ -137,6 +144,13 @@
           text = ''
             set -e
             echo "📎 Running Clippy lints..."
+            
+            # Set PKG_CONFIG_PATH for Linux builds
+            ${pkgs.lib.optionalString pkgs.stdenv.isLinux ''
+              export PKG_CONFIG_PATH="${pkgs.lib.makeSearchPath "lib/pkgconfig" linuxDeps}:$PKG_CONFIG_PATH"
+              echo "PKG_CONFIG_PATH set for Linux: $PKG_CONFIG_PATH"
+            ''}
+            
             cargo clippy --all-targets --all-features -- -D warnings
             echo "✅ Clippy checks passed!"
           '';
@@ -186,6 +200,13 @@
           text = ''
             set -e
             echo "🔨 Checking that project builds..."
+            
+            # Set PKG_CONFIG_PATH for Linux builds
+            ${pkgs.lib.optionalString pkgs.stdenv.isLinux ''
+              export PKG_CONFIG_PATH="${pkgs.lib.makeSearchPath "lib/pkgconfig" linuxDeps}:$PKG_CONFIG_PATH"
+              echo "PKG_CONFIG_PATH set for Linux: $PKG_CONFIG_PATH"
+            ''}
+            
             cargo build --all-features
             echo "✅ Build check passed!"
           '';
@@ -198,6 +219,13 @@
           text = ''
             set -e
             echo "🔱 Building Trident for Linux..."
+            
+            # Set PKG_CONFIG_PATH for Linux builds
+            ${pkgs.lib.optionalString pkgs.stdenv.isLinux ''
+              export PKG_CONFIG_PATH="${pkgs.lib.makeSearchPath "lib/pkgconfig" linuxDeps}:$PKG_CONFIG_PATH"
+              echo "PKG_CONFIG_PATH set for Linux: $PKG_CONFIG_PATH"
+            ''}
+            
             cargo build --release
             echo "✅ Linux build complete!"
             echo "Binary created at: target/release/trident"
@@ -380,6 +408,12 @@
             echo "Rust version: $(rustc --version)"
             echo "Cargo version: $(cargo --version)"
             echo "cargo-bundle: $(cargo bundle --version 2>/dev/null || echo 'Installing...')"
+            
+            # Set PKG_CONFIG_PATH for Linux builds
+            ${pkgs.lib.optionalString pkgs.stdenv.isLinux ''
+              export PKG_CONFIG_PATH="${pkgs.lib.makeSearchPath "lib/pkgconfig" linuxDeps}:$PKG_CONFIG_PATH"
+              echo "PKG_CONFIG_PATH set for Linux: $PKG_CONFIG_PATH"
+            ''}
             
             # Ensure cargo-bundle is available
             if ! command -v cargo-bundle &> /dev/null; then
