@@ -41,21 +41,30 @@ jobs:
           libssl-dev \
           libgtk-3-dev \
           libglib2.0-dev \
-          libgobject-2.0-dev \
           libcairo2-dev \
           libcairo-gobject2 \
           libpango1.0-dev \
-          libgdk-pixbuf2.0-dev \
+          libgdk-pixbuf-2.0-dev \
           libatk1.0-dev \
           libfontconfig1-dev \
           libfreetype6-dev
           
-    - name: Verify pkg-config setup
+    - name: Verify and fix pkg-config setup
       run: |
         echo "PKG_CONFIG_PATH: $PKG_CONFIG_PATH"
-        pkg-config --list-all | grep glib || true
+        echo "Looking for GLib pkg-config files..."
         find /usr -name "glib-2.0.pc" 2>/dev/null || true
+        find /usr -name "*.pc" 2>/dev/null | grep glib || true
+        
+        # Set PKG_CONFIG_PATH to common locations
+        export PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig:$PKG_CONFIG_PATH"
+        echo "Updated PKG_CONFIG_PATH: $PKG_CONFIG_PATH"
+        
+        # Test if we can find glib now
         pkg-config --cflags --libs glib-2.0 || true
+        
+        # Export for subsequent steps
+        echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig" >> $GITHUB_ENV
           
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@master
@@ -155,11 +164,10 @@ jobs:
           libssl-dev \
           libgtk-3-dev \
           libglib2.0-dev \
-          libgobject-2.0-dev \
           libcairo2-dev \
           libcairo-gobject2 \
           libpango1.0-dev \
-          libgdk-pixbuf2.0-dev \
+          libgdk-pixbuf-2.0-dev \
           libatk1.0-dev \
           libfontconfig1-dev \
           libfreetype6-dev
