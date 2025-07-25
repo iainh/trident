@@ -40,6 +40,7 @@
           pkgs.wayland
           # GLib/GTK dependencies for GPUI
           pkgs.glib
+          pkgs.glib.dev
           pkgs.gobject-introspection
           pkgs.gtk3
           pkgs.gtk4
