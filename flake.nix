@@ -129,7 +129,7 @@
             
             # Set PKG_CONFIG_PATH for Linux builds
             ${pkgs.lib.optionalString pkgs.stdenv.isLinux ''
-              export PKG_CONFIG_PATH="${pkgs.lib.makeSearchPath "lib/pkgconfig" linuxDeps}:$PKG_CONFIG_PATH"
+              export PKG_CONFIG_PATH="${pkgs.lib.makeSearchPath "lib/pkgconfig" linuxDeps}''${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
               echo "PKG_CONFIG_PATH set for Linux: $PKG_CONFIG_PATH"
             ''}
             
@@ -147,7 +147,7 @@
             
             # Set PKG_CONFIG_PATH for Linux builds
             ${pkgs.lib.optionalString pkgs.stdenv.isLinux ''
-              export PKG_CONFIG_PATH="${pkgs.lib.makeSearchPath "lib/pkgconfig" linuxDeps}:$PKG_CONFIG_PATH"
+              export PKG_CONFIG_PATH="${pkgs.lib.makeSearchPath "lib/pkgconfig" linuxDeps}''${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
               echo "PKG_CONFIG_PATH set for Linux: $PKG_CONFIG_PATH"
             ''}
             
@@ -203,7 +203,7 @@
             
             # Set PKG_CONFIG_PATH for Linux builds
             ${pkgs.lib.optionalString pkgs.stdenv.isLinux ''
-              export PKG_CONFIG_PATH="${pkgs.lib.makeSearchPath "lib/pkgconfig" linuxDeps}:$PKG_CONFIG_PATH"
+              export PKG_CONFIG_PATH="${pkgs.lib.makeSearchPath "lib/pkgconfig" linuxDeps}''${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
               echo "PKG_CONFIG_PATH set for Linux: $PKG_CONFIG_PATH"
             ''}
             
@@ -222,7 +222,7 @@
             
             # Set PKG_CONFIG_PATH for Linux builds
             ${pkgs.lib.optionalString pkgs.stdenv.isLinux ''
-              export PKG_CONFIG_PATH="${pkgs.lib.makeSearchPath "lib/pkgconfig" linuxDeps}:$PKG_CONFIG_PATH"
+              export PKG_CONFIG_PATH="${pkgs.lib.makeSearchPath "lib/pkgconfig" linuxDeps}''${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
               echo "PKG_CONFIG_PATH set for Linux: $PKG_CONFIG_PATH"
             ''}
             
@@ -411,7 +411,7 @@
             
             # Set PKG_CONFIG_PATH for Linux builds
             ${pkgs.lib.optionalString pkgs.stdenv.isLinux ''
-              export PKG_CONFIG_PATH="${pkgs.lib.makeSearchPath "lib/pkgconfig" linuxDeps}:$PKG_CONFIG_PATH"
+              export PKG_CONFIG_PATH="${pkgs.lib.makeSearchPath "lib/pkgconfig" linuxDeps}''${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
               echo "PKG_CONFIG_PATH set for Linux: $PKG_CONFIG_PATH"
             ''}
             
