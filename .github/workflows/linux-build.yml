@@ -10,6 +10,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  PKG_CONFIG_PATH: /usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig
 
 jobs:
   linux-build:
@@ -42,29 +43,23 @@ jobs:
           libgtk-3-dev \
           libglib2.0-dev \
           libcairo2-dev \
-          libcairo-gobject2 \
           libpango1.0-dev \
           libgdk-pixbuf-2.0-dev \
           libatk1.0-dev \
           libfontconfig1-dev \
           libfreetype6-dev
           
-    - name: Verify and fix pkg-config setup
+    - name: Verify pkg-config setup
       run: |
         echo "PKG_CONFIG_PATH: $PKG_CONFIG_PATH"
         echo "Looking for GLib pkg-config files..."
-        find /usr -name "glib-2.0.pc" 2>/dev/null || true
-        find /usr -name "*.pc" 2>/dev/null | grep glib || true
+        find /usr -name "glib-2.0.pc" 2>/dev/null || echo "glib-2.0.pc not found"
+        find /usr -name "*.pc" 2>/dev/null | grep glib | head -5 || echo "No glib .pc files found"
         
-        # Set PKG_CONFIG_PATH to common locations
-        export PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig:$PKG_CONFIG_PATH"
-        echo "Updated PKG_CONFIG_PATH: $PKG_CONFIG_PATH"
-        
-        # Test if we can find glib now
-        pkg-config --cflags --libs glib-2.0 || true
-        
-        # Export for subsequent steps
-        echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig" >> $GITHUB_ENV
+        # Test pkg-config
+        echo "Testing pkg-config for glib-2.0..."
+        pkg-config --exists glib-2.0 && echo "glib-2.0 found by pkg-config" || echo "glib-2.0 NOT found by pkg-config"
+        pkg-config --cflags --libs glib-2.0 || echo "Failed to get glib-2.0 flags"
           
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@master
@@ -165,7 +160,6 @@ jobs:
           libgtk-3-dev \
           libglib2.0-dev \
           libcairo2-dev \
-          libcairo-gobject2 \
           libpango1.0-dev \
           libgdk-pixbuf-2.0-dev \
           libatk1.0-dev \
