@@ -31,7 +31,7 @@ impl UnixHotkeyManager {
             registered: false,
         }
     }
-    
+
     pub fn new_with_config(config: HotkeyConfig) -> Self {
         Self {
             platform: UnixPlatform,
