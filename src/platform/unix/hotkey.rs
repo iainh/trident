@@ -7,6 +7,10 @@ use crate::platform::unix::UnixPlatform;
 use crate::platform::{DisplayServer, HotkeyManager};
 use anyhow::{Result, anyhow};
 use std::sync::{Arc, Mutex};
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+use x11rb::protocol::xproto::KeyButMask;
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+use x11rb::connection::Connection;
 
 // Type alias for hotkey callback
 type HotkeyCallback = Arc<Mutex<Option<Box<dyn Fn() + Send + Sync>>>>;
@@ -16,7 +20,7 @@ pub struct UnixHotkeyManager {
     callback: HotkeyCallback,
     config: HotkeyConfig,
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    x11_connection: Option<Arc<dyn x11rb::connection::Connection>>,
+    x11_connection: Option<std::sync::Arc<x11rb::rust_connection::RustConnection>>,
     registered: bool,
 }
 
@@ -32,6 +36,7 @@ impl UnixHotkeyManager {
         }
     }
 
+    #[allow(dead_code)]
     pub fn new_with_config(config: HotkeyConfig) -> Self {
         Self {
             platform: UnixPlatform,
@@ -48,7 +53,6 @@ impl UnixHotkeyManager {
         use x11rb::connection::Connection;
         use x11rb::protocol::Event;
         use x11rb::protocol::xproto::*;
-        use x11rb::rust_connection::ReplyError;
 
         let (conn, screen_num) = x11rb::connect(None).map_err(|e| {
             anyhow!(
@@ -57,7 +61,7 @@ impl UnixHotkeyManager {
             )
         })?;
 
-        let conn = Arc::new(conn);
+        let conn = std::sync::Arc::new(conn);
         let setup = conn.setup();
         let screen = &setup.roots[screen_num];
         let root = screen.root;
@@ -75,7 +79,7 @@ impl UnixHotkeyManager {
             &*conn,
             false, // owner_events
             root,
-            modifiers.into(),
+            x11rb::protocol::xproto::ModMask::from(modifiers.bits()),
             keycode,
             GrabMode::ASYNC,
             GrabMode::ASYNC,
@@ -95,7 +99,7 @@ impl UnixHotkeyManager {
             loop {
                 match conn_clone.wait_for_event() {
                     Ok(Event::KeyPress(key_event)) => {
-                        if key_event.detail == keycode && key_event.state == modifiers {
+                        if key_event.detail == keycode && KeyButMask::from(key_event.state) == modifiers {
                             tracing::debug!("X11 hotkey triggered");
                             if let Ok(callback_guard) = callback_clone.lock() {
                                 if let Some(ref cb) = *callback_guard {
@@ -123,8 +127,7 @@ impl UnixHotkeyManager {
     }
 
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    fn parse_hotkey_combination(&self, combination: &str) -> Result<(KeyButMask, &str)> {
-        use x11rb::protocol::xproto::KeyButMask;
+    fn parse_hotkey_combination<'a>(&self, combination: &'a str) -> Result<(KeyButMask, &'a str)> {
         let mut modifiers = KeyButMask::default();
         let mut key_part = "";
 
@@ -132,8 +135,8 @@ impl UnixHotkeyManager {
             match part.to_lowercase().as_str() {
                 "shift" => modifiers |= KeyButMask::SHIFT,
                 "control" | "ctrl" => modifiers |= KeyButMask::CONTROL,
-                "alt" => modifiers |= KeyButMask::M1,
-                "super" | "win" | "cmd" => modifiers |= KeyButMask::M4,
+                "alt" => modifiers |= KeyButMask::MOD1,
+                "super" | "win" | "cmd" => modifiers |= KeyButMask::MOD4,
                 _ => key_part = part,
             }
         }
@@ -148,7 +151,7 @@ impl UnixHotkeyManager {
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     fn get_keycode_for_key_name(
         &self,
-        conn: &impl x11rb::connection::Connection,
+        conn: &x11rb::rust_connection::RustConnection,
         key_name: &str,
     ) -> Result<u8> {
         // This is a simplified mapping. For a full implementation, a library like `xkbcommon` would be better.
@@ -252,7 +255,7 @@ impl HotkeyManager for UnixHotkeyManager {
                                 &*conn,
                                 keycode,
                                 screen.root,
-                                modifiers,
+                                x11rb::protocol::xproto::ModMask::from(modifiers.bits()),
                             );
                             let _ = conn.flush();
                         }
