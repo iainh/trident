@@ -1,7 +1,6 @@
 // ABOUTME: Search input component for typing SSH host queries
 // ABOUTME: Handles text input and keyboard events for real-time search
 
-#[cfg(not(test))]
 use gpui::*;
 
 #[derive(Clone)]
@@ -12,6 +11,7 @@ pub struct SearchInput {
     pub suggestion: Option<String>,
 }
 
+#[allow(dead_code)]
 impl SearchInput {
     pub fn new(placeholder: String) -> Self {
         Self {
@@ -62,7 +62,6 @@ impl SearchInput {
     }
 }
 
-#[cfg(not(test))]
 impl IntoElement for SearchInput {
     type Element = Div;
 

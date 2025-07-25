@@ -69,6 +69,7 @@ impl ZedTheme {
     }
 }
 
+#[allow(dead_code)]
 struct TridentApp {
     state: AppState,
     search_input: SearchInput,
@@ -77,6 +78,7 @@ struct TridentApp {
     focus_handle: FocusHandle,
 }
 
+#[allow(dead_code)]
 impl TridentApp {
     #[cfg(not(test))]
     fn new(cx: &mut Context<Self>) -> Self {
@@ -323,7 +325,7 @@ impl Render for TridentApp {
 
 #[cfg(not(test))]
 fn main() -> Result<()> {
-    use tracing::{Level};
+    use tracing::Level;
     use tracing_subscriber::FmtSubscriber;
     let subscriber = FmtSubscriber::builder()
         .with_max_level(Level::INFO)
@@ -335,6 +337,7 @@ fn main() -> Result<()> {
 }
 
 use std::sync::atomic::AtomicBool;
+#[allow(dead_code)]
 static GLOBAL_HOTKEY_TRIGGERED: AtomicBool = AtomicBool::new(false);
 
 #[cfg(not(test))]
@@ -378,6 +381,7 @@ fn run_menubar_app() -> Result<()> {
 }
 
 #[derive(Default)]
+#[allow(dead_code)]
 struct TridentState {
     launcher_window: Option<AnyWindowHandle>,
 }

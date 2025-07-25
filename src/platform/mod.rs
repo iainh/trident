@@ -119,6 +119,7 @@ pub enum DesktopEnvironment {
 /// Platform factory to get the appropriate implementations
 pub struct Platform;
 
+#[allow(dead_code)]
 impl Platform {
     /// Get the platform-specific hotkey manager
     #[cfg(target_os = "macos")]

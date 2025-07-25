@@ -46,8 +46,8 @@ impl UnixHotkeyManager {
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     fn try_x11_hotkey(&mut self, callback: Box<dyn Fn() + Send + Sync>) -> Result<()> {
         use x11rb::connection::Connection;
-        use x11rb::protocol::xproto::*;
         use x11rb::protocol::Event;
+        use x11rb::protocol::xproto::*;
         use x11rb::rust_connection::ReplyError;
 
         let (conn, screen_num) = x11rb::connect(None).map_err(|e| {

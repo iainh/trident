@@ -115,6 +115,7 @@ impl Default for Config {
     }
 }
 
+#[allow(dead_code)]
 impl Config {
     pub fn generate_default_config() -> String {
         let terminal_config = Self::detect_best_terminal();
@@ -297,6 +298,7 @@ impl Config {
     }
 }
 
+#[allow(dead_code)]
 fn expand_tilde(path: &str) -> Result<String> {
     if let Some(stripped) = path.strip_prefix("~/") {
         let home = dirs::home_dir().context("Failed to determine home directory")?;

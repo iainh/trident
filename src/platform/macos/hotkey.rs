@@ -9,6 +9,7 @@ pub struct MacOSHotkeyManager {
     native_manager: NativeHotKeyManager,
 }
 
+#[allow(dead_code)]
 impl MacOSHotkeyManager {
     pub fn new() -> Self {
         Self {

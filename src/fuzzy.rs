@@ -131,8 +131,8 @@ mod tests {
         (0..count)
             .map(|i| {
                 HostEntry::new(
-                    format!("server{}.example.com", i),
-                    format!("ssh server{}.example.com", i),
+                    format!("server{i}.example.com"),
+                    format!("ssh server{i}.example.com"),
                 )
             })
             .collect()
@@ -242,8 +242,7 @@ mod tests {
 
         assert!(
             duration.as_millis() < 50,
-            "Search took {:?}, should be under 50ms",
-            duration
+            "Search took {duration:?}, should be under 50ms"
         );
     }
 

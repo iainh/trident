@@ -2,9 +2,7 @@
 // ABOUTME: Renders scrollable list of hosts with highlighting for selected item
 
 use crate::ssh::parser::HostEntry;
-#[cfg(not(test))]
 use gpui::prelude::*;
-#[cfg(not(test))]
 use gpui::*;
 
 #[derive(Clone)]
@@ -68,7 +66,6 @@ impl HostList {
     }
 }
 
-#[cfg(not(test))]
 impl IntoElement for HostList {
     type Element = Div;
 
