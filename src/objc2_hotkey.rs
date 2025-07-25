@@ -15,6 +15,7 @@ use objc2::runtime::AnyObject;
 use objc2_app_kit::{NSEvent, NSEventMask, NSEventModifierFlags, NSEventType};
 #[cfg(target_os = "macos")]
 use objc2_foundation::MainThreadMarker;
+#[cfg(target_os = "macos")]
 use std::ptr::NonNull;
 
 // Link to ApplicationServices framework for accessibility permissions
@@ -26,15 +27,18 @@ unsafe extern "C" {
 }
 
 // Global callback storage for the NSEvent monitor
+#[allow(dead_code)]
 static GLOBAL_HOTKEY_CALLBACK: Mutex<Option<Arc<dyn Fn() + Send + Sync>>> = Mutex::new(None);
 
 pub struct NativeHotKeyManager {
     #[cfg(target_os = "macos")]
     event_monitor: Option<objc2::rc::Retained<AnyObject>>, // NSEvent monitor reference
+    #[allow(dead_code)]
     callback: HotkeyCallback,
 }
 
 impl NativeHotKeyManager {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
             #[cfg(target_os = "macos")]
@@ -44,6 +48,7 @@ impl NativeHotKeyManager {
     }
 
     #[cfg(target_os = "macos")]
+    #[allow(dead_code)]
     pub fn prompt_for_accessibility_if_needed(&self) -> bool {
         self.check_and_prompt_for_accessibility_permissions()
     }
@@ -53,6 +58,7 @@ impl NativeHotKeyManager {
         false // No accessibility permissions needed on non-macOS
     }
 
+    #[allow(dead_code)]
     pub fn set_callback<F>(&mut self, callback: F) -> Result<()>
     where
         F: Fn() + Send + Sync + 'static,
@@ -73,6 +79,7 @@ impl NativeHotKeyManager {
     }
 
     #[cfg(target_os = "macos")]
+    #[allow(dead_code)]
     pub fn register_cmd_shift_s(&mut self) -> Result<()> {
         // Check if accessibility is enabled and prompt if needed
         if !self.check_and_prompt_for_accessibility_permissions() {
