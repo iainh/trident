@@ -16,6 +16,7 @@ impl UnixConfigDetector {
         Self
     }
 
+    #[allow(dead_code)]
     fn detect_desktop_environment() -> DesktopEnvironment {
         if let Ok(de) = std::env::var("XDG_CURRENT_DESKTOP") {
             match de.to_lowercase().as_str() {
@@ -137,7 +138,7 @@ impl UnixConfigDetector {
                 LaunchStrategy::ShellCommand,
             ),
             p if p.contains("kitty") => (
-                vec!["sh", "-c".to_string(), "{ssh_command}".to_string()],
+                vec!["sh".to_string(), "-c".to_string(), "{ssh_command}".to_string()],
                 LaunchStrategy::ShellCommand,
             ),
             p if p.contains("hyper") => (
@@ -203,7 +204,7 @@ impl UnixConfigDetector {
             DetectedTerminal {
                 name: "Kitty".to_string(),
                 program: "kitty".to_string(),
-                args: vec!["sh", "-c".to_string(), "{ssh_command}".to_string()],
+                args: vec!["sh".to_string(), "-c".to_string(), "{ssh_command}".to_string()],
                 strategy: LaunchStrategy::ShellCommand,
             },
             DetectedTerminal {
