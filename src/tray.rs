@@ -50,16 +50,14 @@ impl TridentTray {
         let icon = tray_icon::Icon::from_rgba(icon.into_raw(), width, height)?;
 
         // Create the tray icon with template mode for macOS dark mode support
-        let mut tray_builder = TrayIconBuilder::new()
+        let tray_builder = TrayIconBuilder::new()
             .with_menu(Box::new(menu))
             .with_tooltip("Trident SSH Launcher")
             .with_icon(icon);
 
         // Enable template mode on macOS for automatic dark mode adaptation
         #[cfg(target_os = "macos")]
-        {
-            tray_builder = tray_builder.with_icon_as_template(true);
-        }
+        let tray_builder = tray_builder.with_icon_as_template(true);
 
         let tray_icon = tray_builder.build()?;
 
