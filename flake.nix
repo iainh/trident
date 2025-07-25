@@ -43,11 +43,17 @@
           pkgs.glib.dev
           pkgs.gobject-introspection
           pkgs.gtk3
+          pkgs.gtk3.dev
           pkgs.gtk4
+          pkgs.gtk4.dev
           pkgs.cairo
+          pkgs.cairo.dev
           pkgs.pango
+          pkgs.pango.dev
           pkgs.gdk-pixbuf
+          pkgs.gdk-pixbuf.dev
           pkgs.atk
+          pkgs.atk.dev
           # Additional system libraries
           pkgs.fontconfig
           pkgs.freetype
