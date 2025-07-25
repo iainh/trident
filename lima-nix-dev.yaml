@@ -2,7 +2,8 @@
 # ABOUTME: Provides Ubuntu-based Linux environment with Nix for building and testing on macOS
 
 # VM configuration
-vmType: "qemu"
+vmType: "vz"
+mountType: "virtiofs"
 os: "Linux"
 arch: "aarch64"
 
