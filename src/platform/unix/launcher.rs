@@ -21,7 +21,7 @@ impl UnixTerminalLauncher {
 
         // This is an X11-specific feature. It will not work on Wayland.
         if std::env::var("WAYLAND_DISPLAY").is_ok() {
-            log::debug!("Wayland detected, skipping window activation.");
+            tracing::debug!("Wayland detected, skipping window activation.");
             return Ok(());
         }
 
@@ -31,7 +31,7 @@ impl UnixTerminalLauncher {
                 .status()
                 .is_ok()
             {
-                log::debug!("wmctrl activation successful");
+                tracing::debug!("wmctrl activation successful");
                 return Ok(());
             }
         }
@@ -42,12 +42,12 @@ impl UnixTerminalLauncher {
                 .status()
                 .is_ok()
             {
-                log::debug!("xdotool activation successful");
+                tracing::debug!("xdotool activation successful");
                 return Ok(());
             }
         }
 
-        log::debug!("No suitable window activation tool found (wmctrl, xdotool).");
+        tracing::debug!("No suitable window activation tool found (wmctrl, xdotool).");
         Ok(())
     }
 }
@@ -72,16 +72,16 @@ impl PlatformTerminalLauncher for UnixTerminalLauncher {
             }
         }
 
-        log::debug!("Launching Unix terminal: {:?}", cmd);
+        tracing::debug!("Launching Unix terminal: {:?}", cmd);
 
         match cmd.spawn() {
             Ok(_) => {
-                log::info!("Successfully launched terminal with command: {}", command);
+                tracing::info!("Successfully launched terminal with command: {}", command);
 
                 if let Some(app_name) = std::path::Path::new(&config.program).file_name() {
                     if let Some(name_str) = app_name.to_str() {
                         if let Err(e) = self.bring_terminal_to_front_unix(name_str) {
-                            log::warn!("Failed to bring terminal to front: {}", e);
+                            tracing::warn!("Failed to bring terminal to front: {}", e);
                         }
                     }
                 }
@@ -113,6 +113,7 @@ mod tests {
     #[test]
     fn test_direct_launch_strategy() {
         let config = TerminalConfig {
+            strategy: crate::config::LaunchStrategy::default(),
             program: "/usr/bin/gnome-terminal".to_string(),
             args: vec!["--".to_string()],
             strategy: LaunchStrategy::Direct,
@@ -126,10 +127,11 @@ mod tests {
     #[test]
     fn test_shell_command_launch_strategy() {
         let config = TerminalConfig {
+            strategy: crate::config::LaunchStrategy::default(),
             program: "alacritty".to_string(),
             args: vec![
                 "-e".to_string(),
-                "sh",
+                "sh".to_string(),
                 "-c".to_string(),
                 "{ssh_command}".to_string(),
             ],

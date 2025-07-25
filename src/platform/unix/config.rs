@@ -54,11 +54,11 @@ impl UnixConfigDetector {
 
     #[cfg(target_os = "linux")]
     fn parse_desktop_file(file_path: &Path) -> Option<DetectedTerminal> {
-        use freedesktop_desktop_entry::{DesktopEntry, Type as DesktopEntryType};
+        use freedesktop_desktop_entry::DesktopEntry;
 
-        if let Ok(bytes) = fs::read(file_path) {
-            if let Ok(desktop_entry) = DesktopEntry::from_bytes(&bytes) {
-                if desktop_entry.type_() != Some(DesktopEntryType::Application) {
+        if let Ok(content) = fs::read_to_string(file_path) {
+            if let Ok(desktop_entry) = DesktopEntry::decode(file_path, &content) {
+                if !matches!(desktop_entry.type_(), Some("Application")) {
                     return None;
                 }
 
@@ -130,7 +130,7 @@ impl UnixConfigDetector {
             p if p.contains("alacritty") => (
                 vec![
                     "-e".to_string(),
-                    "sh",
+                    "sh".to_string(),
                     "-c".to_string(),
                     "{ssh_command}".to_string(),
                 ],
@@ -151,7 +151,7 @@ impl UnixConfigDetector {
             p if p.contains("urxvt") || p.contains("rxvt") => (
                 vec![
                     "-e".to_string(),
-                    "sh",
+                    "sh".to_string(),
                     "-c".to_string(),
                     "{ssh_command}".to_string(),
                 ],
@@ -160,7 +160,7 @@ impl UnixConfigDetector {
             p if p.contains("xterm") => (
                 vec![
                     "-e".to_string(),
-                    "sh",
+                    "sh".to_string(),
                     "-c".to_string(),
                     "{ssh_command}".to_string(),
                 ],
@@ -194,7 +194,7 @@ impl UnixConfigDetector {
                 program: "alacritty".to_string(),
                 args: vec![
                     "-e".to_string(),
-                    "sh",
+                    "sh".to_string(),
                     "-c".to_string(),
                     "{ssh_command}".to_string(),
                 ],
@@ -257,9 +257,8 @@ impl ConfigDetector for UnixConfigDetector {
 
         // 3. FreeBSD-specific detection
         if cfg!(target_os = "freebsd") {
-            for terminal in self.detect_freebsd_ports_terminals() {
-                detected.insert(terminal);
-            }
+            // FreeBSD ports detection would go here
+            // TODO: Implement FreeBSD ports terminal detection
         }
 
         detected.into_iter().collect()
@@ -290,9 +289,6 @@ impl ConfigDetector for UnixConfigDetector {
     }
 
     #[cfg(not(target_os = "freebsd"))]
-    fn detect_freebsd_ports_terminals(&self) -> Vec<DetectedTerminal> {
-        Vec::new()
-    }
 
     fn get_default_ssh_paths(&self) -> SshPaths {
         let ssh_binary =
@@ -368,7 +364,8 @@ mod tests {
 
     #[test]
     fn test_get_default_ssh_paths() {
-        let paths = UnixConfigDetector::get_default_ssh_paths();
+        let detector = UnixConfigDetector;
+        let paths = detector.get_default_ssh_paths();
         assert!(!paths.ssh_binary.is_empty());
         assert!(paths.known_hosts_path.contains(".ssh/known_hosts"));
     }

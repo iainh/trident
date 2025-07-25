@@ -16,7 +16,7 @@ pub struct UnixHotkeyManager {
     callback: HotkeyCallback,
     config: HotkeyConfig,
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    x11_connection: Option<Arc<x11rb::connection::Connection>>,
+    x11_connection: Option<Arc<dyn x11rb::connection::Connection>>,
     registered: bool,
 }
 
@@ -47,6 +47,7 @@ impl UnixHotkeyManager {
     fn try_x11_hotkey(&mut self, callback: Box<dyn Fn() + Send + Sync>) -> Result<()> {
         use x11rb::connection::Connection;
         use x11rb::protocol::xproto::*;
+        use x11rb::protocol::Event;
         use x11rb::rust_connection::ReplyError;
 
         let (conn, screen_num) = x11rb::connect(None).map_err(|e| {
@@ -70,26 +71,15 @@ impl UnixHotkeyManager {
             keycode
         );
 
-        let grab_result = grab_key(
+        grab_key(
             &*conn,
             false, // owner_events
             root,
-            modifiers,
+            modifiers.into(),
             keycode,
             GrabMode::ASYNC,
             GrabMode::ASYNC,
-        )
-        .get_reply();
-
-        if let Err(ReplyError::X11Error(ref error)) = grab_result {
-            if error.error_code == x11rb::protocol::xproto::BAD_ACCESS {
-                return Err(anyhow!(
-                    "Failed to grab hotkey '{}'. It is likely already in use by another application.",
-                    self.config.combination
-                ));
-            }
-        }
-        grab_result?;
+        )?;
 
         self.x11_connection = Some(conn.clone());
 
@@ -105,7 +95,7 @@ impl UnixHotkeyManager {
             loop {
                 match conn_clone.wait_for_event() {
                     Ok(Event::KeyPress(key_event)) => {
-                        if key_event.detail == keycode && key_event.state == modifiers.into() {
+                        if key_event.detail == keycode && key_event.state == modifiers {
                             tracing::debug!("X11 hotkey triggered");
                             if let Ok(callback_guard) = callback_clone.lock() {
                                 if let Some(ref cb) = *callback_guard {
@@ -133,17 +123,17 @@ impl UnixHotkeyManager {
     }
 
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    fn parse_hotkey_combination(&self, combination: &str) -> Result<(ModMask, &str)> {
-        use x11rb::protocol::xproto::ModMask;
-        let mut modifiers = ModMask::empty();
+    fn parse_hotkey_combination(&self, combination: &str) -> Result<(KeyButMask, &str)> {
+        use x11rb::protocol::xproto::KeyButMask;
+        let mut modifiers = KeyButMask::default();
         let mut key_part = "";
 
         for part in combination.split('+') {
             match part.to_lowercase().as_str() {
-                "shift" => modifiers |= ModMask::SHIFT,
-                "control" | "ctrl" => modifiers |= ModMask::CONTROL,
-                "alt" => modifiers |= ModMask::M1,
-                "super" | "win" | "cmd" => modifiers |= ModMask::M4,
+                "shift" => modifiers |= KeyButMask::SHIFT,
+                "control" | "ctrl" => modifiers |= KeyButMask::CONTROL,
+                "alt" => modifiers |= KeyButMask::M1,
+                "super" | "win" | "cmd" => modifiers |= KeyButMask::M4,
                 _ => key_part = part,
             }
         }
@@ -231,6 +221,22 @@ impl HotkeyManager for UnixHotkeyManager {
             DisplayServer::Wayland => self.try_wayland_de_integration(callback),
             DisplayServer::Unknown => Err(anyhow!("Unknown display server.")),
         }
+    }
+
+    fn register_fallback_hotkey(&mut self, callback: Box<dyn Fn() + Send + Sync>) -> Result<()> {
+        self.try_wayland_de_integration(callback)
+    }
+
+    fn check_display_server_support(&self) -> bool {
+        self.platform.supports_global_hotkeys()
+    }
+
+    fn check_permissions(&self) -> bool {
+        true // X11 doesn't require special permissions
+    }
+
+    fn prompt_for_permissions(&self) -> bool {
+        true // No permissions needed
     }
 
     fn unregister(&mut self) -> Result<()> {

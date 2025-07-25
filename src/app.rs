@@ -249,7 +249,9 @@ mod tests {
             terminal: TerminalConfig {
                 program: "/bin/echo".to_string(),
                 args: vec!["Launching:".to_string(), "{ssh_command}".to_string()],
+                strategy: crate::config::LaunchStrategy::default(),
             },
+            hotkey: crate::config::HotkeyConfig::default(),
             ssh: SshConfig {
                 known_hosts_path: known_hosts_path.to_string_lossy().to_string(),
                 config_path: ssh_config_path.to_string_lossy().to_string(),

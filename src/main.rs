@@ -13,11 +13,9 @@ use anyhow::Result;
 use app::AppState;
 use config::Config;
 use gpui::*;
-use platform::Platform;
 use ssh::{HostEntry, TerminalLauncher, parse_known_hosts, parse_ssh_config};
 use std::path::Path;
-use tracing::{Level, error, info, warn};
-use tracing_subscriber::FmtSubscriber;
+use tracing::{error, info, warn};
 use ui::{HostList, SearchInput};
 
 actions!(trident, [ShowLauncher, QuitApp, ToggleLauncher]);
@@ -120,7 +118,7 @@ impl TridentApp {
 
     #[cfg(test)]
     fn new(cx: &mut Context<Self>) -> Self {
-        use config::{ParsingConfig, SshConfig, TerminalConfig, UiConfig};
+        use config::{HotkeyConfig, ParsingConfig, SshConfig, TerminalConfig, UiConfig};
 
         let config = Config {
             terminal: TerminalConfig {
@@ -325,6 +323,8 @@ impl Render for TridentApp {
 
 #[cfg(not(test))]
 fn main() -> Result<()> {
+    use tracing::{Level};
+    use tracing_subscriber::FmtSubscriber;
     let subscriber = FmtSubscriber::builder()
         .with_max_level(Level::INFO)
         .finish();
@@ -334,11 +334,13 @@ fn main() -> Result<()> {
     run_menubar_app()
 }
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 static GLOBAL_HOTKEY_TRIGGERED: AtomicBool = AtomicBool::new(false);
 
 #[cfg(not(test))]
 fn run_menubar_app() -> Result<()> {
+    use crate::platform::Platform;
+    use std::sync::atomic::Ordering;
     Application::new().run(|cx: &mut App| {
         let _config = TridentApp::load_config().unwrap_or_default();
 

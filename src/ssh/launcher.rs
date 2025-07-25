@@ -264,6 +264,7 @@ mod tests {
     #[test]
     fn test_launcher_substitutes_ssh_command() {
         let config = TerminalConfig {
+            strategy: crate::config::LaunchStrategy::default(),
             program: "/usr/bin/osascript".to_string(),
             args: vec![
                 "-e".to_string(),
@@ -292,6 +293,7 @@ mod tests {
     #[test]
     fn test_launcher_handles_multiple_placeholders() {
         let config = TerminalConfig {
+            strategy: crate::config::LaunchStrategy::default(),
             program: "/usr/bin/terminal".to_string(),
             args: vec![
                 "--title".to_string(),
@@ -380,6 +382,7 @@ mod tests {
     fn test_should_use_open_command() {
         // Should use open for app bundles
         let config1 = TerminalConfig {
+            strategy: crate::config::LaunchStrategy::default(),
             program: "/Applications/Ghostty.app/Contents/MacOS/ghostty".to_string(),
             args: vec!["-e".to_string(), "{ssh_command}".to_string()],
         };
@@ -388,6 +391,7 @@ mod tests {
 
         // Should use open for iTerm
         let config2 = TerminalConfig {
+            strategy: crate::config::LaunchStrategy::default(),
             program: "/Applications/iTerm.app/Contents/MacOS/iTerm2".to_string(),
             args: vec!["-c".to_string(), "{ssh_command}".to_string()],
         };
@@ -396,6 +400,7 @@ mod tests {
 
         // Should NOT use open for osascript (even though it's for an app)
         let config3 = TerminalConfig {
+            strategy: crate::config::LaunchStrategy::default(),
             program: "/usr/bin/osascript".to_string(),
             args: vec![
                 "-e".to_string(),
@@ -407,6 +412,7 @@ mod tests {
 
         // Should NOT use open for direct binary paths
         let config4 = TerminalConfig {
+            strategy: crate::config::LaunchStrategy::default(),
             program: "/usr/local/bin/alacritty".to_string(),
             args: vec!["-e".to_string(), "{ssh_command}".to_string()],
         };
