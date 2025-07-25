@@ -19,11 +19,8 @@ disk: "20GiB"
 # File system mounts
 mounts:
 - location: "~"
-  writable: false
-- location: "/tmp/lima"
   writable: true
-# Mount the project directory with write permissions for building
-- location: "~/projects/trident"
+- location: "/tmp/lima"
   writable: true
 
 # Provisioning script to set up Nix development environment
@@ -75,7 +72,6 @@ provision:
     # Create convenience aliases
     echo '' >> ~/.bashrc
     echo '# Trident development aliases' >> ~/.bashrc
-    echo "alias tcd='cd ~/projects/trident 2>/dev/null || echo \"Project not found\"'" >> ~/.bashrc
     echo "alias tbuild='cargo build --target aarch64-unknown-linux-gnu --release'" >> ~/.bashrc
     echo "alias ttest='cargo test --target aarch64-unknown-linux-gnu'" >> ~/.bashrc
     echo "alias trun='cargo run'" >> ~/.bashrc
@@ -90,12 +86,11 @@ provision:
 message: |
   🔱 Trident Development VM Ready!
   
-  Project directory: ~/projects/trident
+  Project directory: Mounted from host
   
   Quick start:
-    tcd          # Navigate to project
     nix develop  # Enter development shell
     tbuild       # Build for Linux
     ttest        # Run tests
     
-  To access from host: lima shell nix-dev
+  To access from host: limactl shell nix-dev

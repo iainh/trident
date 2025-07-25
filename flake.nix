@@ -262,17 +262,17 @@
             echo "🔱 Building Trident for Linux via Lima..."
             
             # Check if Lima VM is running
-            if ! limactl list | grep -q "nix-dev.*Running"; then
+            if ! limactl list 2>/dev/null | grep -q "nix-dev.*Running"; then
               echo "⚠️  Lima VM not running. Starting it now..."
               limactl start lima-nix-dev.yaml --name=nix-dev
             fi
             
             # Build the project inside Lima VM
             echo "Building inside Lima VM..."
-            limactl shell nix-dev -- bash -c '
-              cd ~/projects/trident || { echo "Project directory not found"; exit 1; }
-              nix develop --impure --command bash -c "cargo build --release --target aarch64-unknown-linux-gnu"
-            '
+            limactl shell nix-dev -- bash -c "
+              cd '$PWD' || { echo 'Project directory not found'; exit 1; }
+              nix develop --impure --command bash -c 'cargo build --release --target aarch64-unknown-linux-gnu'
+            "
             
             echo "✅ Linux build completed via Lima!"
             echo "Binary available at: target/aarch64-unknown-linux-gnu/release/trident"
@@ -287,17 +287,17 @@
             echo "🔱 Running Trident tests via Lima..."
             
             # Check if Lima VM is running
-            if ! limactl list | grep -q "nix-dev.*Running"; then
+            if ! limactl list 2>/dev/null | grep -q "nix-dev.*Running"; then
               echo "⚠️  Lima VM not running. Starting it now..."
               limactl start lima-nix-dev.yaml --name=nix-dev
             fi
             
             # Run tests inside Lima VM
             echo "Running tests inside Lima VM..."
-            limactl shell nix-dev -- bash -c '
-              cd ~/projects/trident || { echo "Project directory not found"; exit 1; }
-              nix develop --impure --command bash -c "cargo test --target aarch64-unknown-linux-gnu"
-            '
+            limactl shell nix-dev -- bash -c "
+              cd '$PWD' || { echo 'Project directory not found'; exit 1; }
+              nix develop --impure --command bash -c 'cargo test --target aarch64-unknown-linux-gnu'
+            "
             
             echo "✅ Tests completed via Lima!"
           '';
@@ -311,17 +311,17 @@
             echo "🔱 Entering Trident Lima Development Shell..."
             
             # Check if Lima VM is running
-            if ! limactl list | grep -q "nix-dev.*Running"; then
+            if ! limactl list 2>/dev/null | grep -q "nix-dev.*Running"; then
               echo "⚠️  Lima VM not running. Starting it now..."
               limactl start lima-nix-dev.yaml --name=nix-dev
             fi
             
             # Enter development shell inside Lima VM
             echo "Entering development shell inside Lima VM..."
-            limactl shell nix-dev -- bash -c '
-              cd ~/projects/trident || { echo "Project directory not found"; exit 1; }
+            limactl shell nix-dev -- bash -c "
+              cd '$PWD' || { echo 'Project directory not found'; exit 1; }
               nix develop --impure
-            '
+            "
           '';
         };
 
