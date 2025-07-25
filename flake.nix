@@ -18,7 +18,7 @@
         # Use the latest stable Rust with required components and cross-compilation targets
         rustToolchain = pkgs.rust-bin.stable.latest.default.override {
           extensions = [ "rust-src" "rust-analyzer" "clippy" "rustfmt" ];
-          targets = [ "x86_64-unknown-linux-gnu" "x86_64-apple-darwin" "aarch64-apple-darwin" ];
+          targets = [ "x86_64-unknown-linux-gnu" "aarch64-unknown-linux-gnu" "x86_64-apple-darwin" "aarch64-apple-darwin" ];
         };
 
         # macOS-specific dependencies - minimal approach during SDK transition
@@ -29,6 +29,7 @@
 
         # Linux-specific dependencies for X11 and desktop integration
         linuxDeps = pkgs.lib.optionals pkgs.stdenv.isLinux [
+          # X11 libraries
           pkgs.xorg.libX11
           pkgs.xorg.libXrandr
           pkgs.xorg.libXcursor
@@ -37,6 +38,21 @@
           pkgs.xorg.libXfixes
           pkgs.libxkbcommon
           pkgs.wayland
+          # GLib/GTK dependencies for GPUI
+          pkgs.glib
+          pkgs.gobject-introspection
+          pkgs.gtk3
+          pkgs.gtk4
+          pkgs.cairo
+          pkgs.pango
+          pkgs.gdk-pixbuf
+          pkgs.atk
+          # Additional system libraries
+          pkgs.fontconfig
+          pkgs.freetype
+          pkgs.libGL
+          pkgs.libdrm
+          pkgs.mesa
           # Tools for testing
           pkgs.wmctrl
           pkgs.xdotool
@@ -58,8 +74,8 @@
           openssl
           # GitHub CLI for repository management
           gh
-          # QEMU for VM testing
-          qemu
+          # Lima for lightweight Linux VMs on macOS
+          lima
         ] ++ darwinDeps ++ linuxDeps;
 
         # Build script that creates the .app bundle
@@ -188,68 +204,124 @@
           '';
         };
 
-        # VM script for easy Linux testing
-        trident-vm = pkgs.writeShellApplication {
-          name = "trident-vm";
-          runtimeInputs = [ pkgs.qemu ];
+
+        # Lima VM management scripts
+        trident-lima-start = pkgs.writeShellApplication {
+          name = "trident-lima-start";
+          runtimeInputs = [ pkgs.lima ];
           text = ''
             set -e
-            echo "🔱 Starting Trident Linux Testing VM..."
-            echo ""
+            echo "🔱 Starting Trident Lima Development VM..."
             
-            # Check if we're on macOS
-            if [[ "$(uname)" == "Darwin" ]]; then
-              echo "🍎 Running on macOS - Cross-system VM building has limitations"
-              echo ""
-              echo "❌ Issue: macOS cannot build Linux VMs natively due to Nix security restrictions"
-              echo ""
-              echo "🔧 Solutions:"
-              echo ""
-              echo "1. Use UTM (recommended for macOS):"
-              echo "   • Download UTM from Mac App Store"
-              echo "   • Download NixOS ISO from https://nixos.org/download"
-              echo "   • Create VM in UTM with NixOS ISO"
-              echo "   • Install Nix in the VM: sh <(curl -L https://nixos.org/nix/install)"
-              echo ""
-              echo "2. Use GitHub Codespaces:"
-              echo "   • Create a Codespace from this repository"
-              echo "   • Run: nix develop && cargo build && cargo run"
-              echo ""
-              echo "3. Use Docker with X11 forwarding:"
-              echo "   • Install XQuartz: brew install --cask xquartz"
-              echo "   • Run: xhost +local:docker"
-              echo "   • docker run -it --rm -e DISPLAY=host.docker.internal:0 -v $(pwd):/workspace nixos/nix"
-              echo ""
-              echo "4. Enable Nix trusted users (requires admin):"
-              echo "   • Add to /etc/nix/nix.conf: trusted-users = root $(whoami)"
-              echo "   • Restart Nix daemon: sudo launchctl unload /Library/LaunchDaemons/org.nixos.nix-daemon.plist"
-              echo "   • sudo launchctl load /Library/LaunchDaemons/org.nixos.nix-daemon.plist"
-              echo ""
-              exit 1
+            # Start Lima VM with our configuration
+            if ! limactl list | grep -q "nix-dev.*Running"; then
+              echo "Starting Lima VM..."
+              limactl start lima-nix-dev.yaml --name=nix-dev
+              echo "✅ Lima VM started successfully!"
+            else
+              echo "ℹ️  Lima VM already running"
             fi
             
-            echo "🐧 Running on Linux - Building NixOS VM..."
+            echo ""
+            echo "🚀 Lima VM is ready for development!"
+            echo ""
+            echo "Available commands:"
+            echo "  limactl shell nix-dev                    # Enter VM shell"
+            echo "  limactl shell nix-dev nix develop        # Enter Nix development shell"
+            echo "  limactl shell nix-dev -- cargo build     # Build in VM"
+            echo "  limactl shell nix-dev -- cargo test      # Test in VM"
+            echo ""
+            echo "Quick development workflow:"
+            echo "  nix run .#lima-build                  # Build for Linux via Lima"
+            echo "  nix run .#lima-test                   # Test via Lima"
+            echo "  nix run .#lima-shell                  # Enter Lima development shell"
+          '';
+        };
+
+        trident-lima-stop = pkgs.writeShellApplication {
+          name = "trident-lima-stop";
+          runtimeInputs = [ pkgs.lima ];
+          text = ''
+            set -e
+            echo "🔱 Stopping Trident Lima Development VM..."
             
-            # Build the VM if it doesn't exist
-            if ! nix build ".#nixosConfigurations.test-vm.config.system.build.vm" --out-link ./vm-result 2>/dev/null; then
-              echo "❌ Failed to build VM. This may require:"
-              echo "  1. Sufficient disk space (~2GB)"
-              echo "  2. Virtualization support"
-              echo ""
-              exit 1
+            if limactl list | grep -q "nix-dev.*Running"; then
+              limactl stop nix-dev
+              echo "✅ Lima VM stopped successfully!"
+            else
+              echo "ℹ️  Lima VM not running"
+            fi
+          '';
+        };
+
+        trident-lima-build = pkgs.writeShellApplication {
+          name = "trident-lima-build";
+          runtimeInputs = [ pkgs.lima ];
+          text = ''
+            set -e
+            echo "🔱 Building Trident for Linux via Lima..."
+            
+            # Check if Lima VM is running
+            if ! limactl list | grep -q "nix-dev.*Running"; then
+              echo "⚠️  Lima VM not running. Starting it now..."
+              limactl start lima-nix-dev.yaml --name=nix-dev
             fi
             
-            echo "✅ VM built successfully!"
-            echo ""
-            echo "🚀 Launching VM..."
-            echo "Login: username=nixos, password=nixos"
-            echo "Project location: /home/nixos/trident"
-            echo ""
-            echo "To stop the VM: Press Ctrl+C"
-            echo ""
+            # Build the project inside Lima VM
+            echo "Building inside Lima VM..."
+            limactl shell nix-dev -- bash -c '
+              cd ~/projects/trident || { echo "Project directory not found"; exit 1; }
+              nix develop --impure --command bash -c "cargo build --release --target aarch64-unknown-linux-gnu"
+            '
             
-            # Run the VM
-            ./vm-result/bin/run-nixos-vm
+            echo "✅ Linux build completed via Lima!"
+            echo "Binary available at: target/aarch64-unknown-linux-gnu/release/trident"
+          '';
+        };
+
+        trident-lima-test = pkgs.writeShellApplication {
+          name = "trident-lima-test";
+          runtimeInputs = [ pkgs.lima ];
+          text = ''
+            set -e
+            echo "🔱 Running Trident tests via Lima..."
+            
+            # Check if Lima VM is running
+            if ! limactl list | grep -q "nix-dev.*Running"; then
+              echo "⚠️  Lima VM not running. Starting it now..."
+              limactl start lima-nix-dev.yaml --name=nix-dev
+            fi
+            
+            # Run tests inside Lima VM
+            echo "Running tests inside Lima VM..."
+            limactl shell nix-dev -- bash -c '
+              cd ~/projects/trident || { echo "Project directory not found"; exit 1; }
+              nix develop --impure --command bash -c "cargo test --target aarch64-unknown-linux-gnu"
+            '
+            
+            echo "✅ Tests completed via Lima!"
+          '';
+        };
+
+        trident-lima-shell = pkgs.writeShellApplication {
+          name = "trident-lima-shell";
+          runtimeInputs = [ pkgs.lima ];
+          text = ''
+            set -e
+            echo "🔱 Entering Trident Lima Development Shell..."
+            
+            # Check if Lima VM is running
+            if ! limactl list | grep -q "nix-dev.*Running"; then
+              echo "⚠️  Lima VM not running. Starting it now..."
+              limactl start lima-nix-dev.yaml --name=nix-dev
+            fi
+            
+            # Enter development shell inside Lima VM
+            echo "Entering development shell inside Lima VM..."
+            limactl shell nix-dev -- bash -c '
+              cd ~/projects/trident || { echo "Project directory not found"; exit 1; }
+              nix develop --impure
+            '
           '';
         };
 
@@ -262,8 +334,12 @@
           macos = trident-build;
           linux = trident-linux-build;
           
-          # VM for Linux testing
-          vm = trident-vm;
+          # Lima development commands
+          lima-start = trident-lima-start;
+          lima-stop = trident-lima-stop;
+          lima-build = trident-lima-build;
+          lima-test = trident-lima-test;
+          lima-shell = trident-lima-shell;
           
           # Make individual checks available as packages too
           test = trident-tests;
@@ -330,13 +406,21 @@
             echo ""
             echo "Nix commands:"
             echo "  nix build            - Build .app bundle"
-            echo "  nix run .#vm         - Start Linux testing VM"
             echo "  nix flake check      - Run all QA checks"
+            echo ""
+            echo "Lima Linux development:"
+            echo "  nix run .#lima-start - Start Lima VM"
+            echo "  nix run .#lima-build - Build for Linux via Lima"
+            echo "  nix run .#lima-test  - Run tests via Lima"
+            echo "  nix run .#lima-shell - Enter Lima development shell"
+            echo "  nix run .#lima-stop  - Stop Lima VM"
             echo ""
             echo "To build the .app bundle: ./build-app.sh"
             echo "The bundle will be created at: target/release/bundle/osx/Trident.app"
             echo ""
-            echo "To test Linux implementation: nix run .#vm"
+            echo "Cross-platform development:"
+            echo "  macOS: Use cargo commands and nix build"
+            echo "  Linux: Use Lima commands for lightweight VM development"
           '';
 
           # Rust-specific environment variables
@@ -345,24 +429,5 @@
           # macOS-specific environment setup
           MACOSX_DEPLOYMENT_TARGET = "12.0";
         };
-      }) // {
-        # NixOS VM for Linux testing
-        nixosConfigurations.test-vm = nixpkgs.lib.nixosSystem {
-          system = "x86_64-linux";
-          modules = [
-            # Import the VM module first
-            "${nixpkgs}/nixos/modules/virtualisation/qemu-vm.nix"
-            ./nixos-test.nix
-            {
-              # Make the rust toolchain available in the VM
-              environment.systemPackages = [
-                (import nixpkgs {
-                  system = "x86_64-linux";
-                  overlays = [ (import rust-overlay) ];
-                }).rust-bin.stable.latest.default
-              ];
-            }
-          ];
-        };
-      };
+      });
 }

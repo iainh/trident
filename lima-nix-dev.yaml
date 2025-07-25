@@ -1,0 +1,101 @@
+# ABOUTME: Lima VM configuration for Trident cross-compilation development
+# ABOUTME: Provides Ubuntu-based Linux environment with Nix for building and testing on macOS
+
+# VM configuration
+vmType: "qemu"
+os: "Linux"
+arch: "aarch64"
+
+# Ubuntu 24.04 ARM64 image for better Lima compatibility
+images:
+- location: "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-arm64.img"
+  arch: "aarch64"
+
+# Resource allocation
+cpus: 4
+memory: "8GiB"
+disk: "20GiB"
+
+# File system mounts
+mounts:
+- location: "~"
+  writable: false
+- location: "/tmp/lima"
+  writable: true
+# Mount the project directory with write permissions for building
+- location: "~/projects/trident"
+  writable: true
+
+# Provisioning script to set up Nix development environment
+provision:
+- mode: system
+  script: |
+    #!/bin/bash
+    set -eux -o pipefail
+    
+    # Update system and install essential packages
+    apt-get update
+    apt-get install -y curl git build-essential pkg-config
+    
+    # Install Determinate Nix - faster and more reliable than standard Nix installer
+    curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install --no-confirm
+    
+    # Determinate Nix automatically enables flakes and sets up trusted users
+    # Add additional configuration if needed
+    mkdir -p /etc/nix
+    echo "trusted-users = root $(whoami)" >> /etc/nix/nix.conf
+
+- mode: user
+  script: |
+    #!/bin/bash
+    set -eux -o pipefail
+    
+    # Source nix environment for user (Determinate Nix sets up environment automatically)
+    # Check both standard and Determinate Nix locations
+    if [ -f /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]; then
+      . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+    elif [ -f /etc/profile.d/nix.sh ]; then
+      . /etc/profile.d/nix.sh
+    fi
+    
+    # Set up development environment in bashrc
+    echo '# Nix environment setup (Determinate Nix)' >> ~/.bashrc
+    echo 'if [ -f /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]; then' >> ~/.bashrc
+    echo '  . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh' >> ~/.bashrc
+    echo 'elif [ -f /etc/profile.d/nix.sh ]; then' >> ~/.bashrc
+    echo '  . /etc/profile.d/nix.sh' >> ~/.bashrc
+    echo 'fi' >> ~/.bashrc
+    
+    # Configure git if not already configured
+    if ! git config --global user.name > /dev/null 2>&1; then
+      git config --global user.name "Lima Development"
+      git config --global user.email "dev@lima.local"
+    fi
+    
+    # Create convenience aliases
+    echo '' >> ~/.bashrc
+    echo '# Trident development aliases' >> ~/.bashrc
+    echo "alias tcd='cd ~/projects/trident 2>/dev/null || echo \"Project not found\"'" >> ~/.bashrc
+    echo "alias tbuild='cargo build --target aarch64-unknown-linux-gnu --release'" >> ~/.bashrc
+    echo "alias ttest='cargo test --target aarch64-unknown-linux-gnu'" >> ~/.bashrc
+    echo "alias trun='cargo run'" >> ~/.bashrc
+    echo "alias tcheck='nix flake check'" >> ~/.bashrc
+    echo '' >> ~/.bashrc
+    echo '# Development shortcuts' >> ~/.bashrc
+    echo "alias ll='ls -la'" >> ~/.bashrc
+    echo "alias la='ls -A'" >> ~/.bashrc
+    echo "alias l='ls -CF'" >> ~/.bashrc
+
+# Message to display when VM starts
+message: |
+  🔱 Trident Development VM Ready!
+  
+  Project directory: ~/projects/trident
+  
+  Quick start:
+    tcd          # Navigate to project
+    nix develop  # Enter development shell
+    tbuild       # Build for Linux
+    ttest        # Run tests
+    
+  To access from host: lima shell nix-dev

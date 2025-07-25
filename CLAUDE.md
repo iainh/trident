@@ -68,6 +68,13 @@ nix run .#fmt-check    # Check code formatting
 nix run .#audit        # Security vulnerability audit
 nix run .#deny         # License and dependency checking
 nix run .#build-check  # Verify project builds
+
+# Lima Linux development
+nix run .#lima-start   # Start Lima VM
+nix run .#lima-build   # Build for Linux via Lima
+nix run .#lima-test    # Run tests via Lima
+nix run .#lima-shell   # Enter Lima development shell
+nix run .#lima-stop    # Stop Lima VM
 ```
 
 ## Project Structure
@@ -129,6 +136,60 @@ The project includes comprehensive QA checks via `nix flake check`:
 3. Use TDD - write tests before implementation
 4. Ensure all performance benchmarks pass
 5. Test with various terminal applications (iTerm2, Terminal.app, etc.)
+
+### Cross-Platform Development
+
+#### macOS Development
+- Use standard `cargo` commands for local development
+- Use `nix build` for creating .app bundles
+- All development can be done natively
+
+#### Linux Cross-Compilation via Lima
+
+Lima provides lightweight Linux VMs with automatic file sharing, making cross-compilation seamless. This is the recommended approach for Linux development on macOS.
+
+**Quick Start:**
+```bash
+# Start Lima development VM
+nix run .#lima-start
+
+# Build for Linux
+nix run .#lima-build
+
+# Run tests on Linux
+nix run .#lima-test
+
+# Enter development shell
+nix run .#lima-shell
+
+# Stop VM when done
+nix run .#lima-stop
+```
+
+**Lima VM Details:**
+- Configuration: `lima-nix-dev.yaml`
+- VM Name: `nix-dev`
+- Ubuntu 24.04 ARM64 base image
+- Automatic project directory mounting with write permissions
+- Determinate Nix pre-installed for fast, reliable package management
+- Resource allocation: 4 CPUs, 8GB RAM, 20GB disk
+
+**Development Environment Benefits:**
+- **Performance**: Native-like speed using Apple's Virtualization.framework
+- **Setup Time**: Fast VM startup (~30s)
+- **Resource Usage**: Low overhead compared to traditional VMs
+- **File Sharing**: Seamless project directory integration
+- **Persistence**: VM state persists between sessions
+
+#### Lima Development Tips
+
+1. **First-time setup**: Initial VM creation downloads Ubuntu 24.04 ARM64 image (~800MB)
+2. **File sharing**: Project directory automatically mounted with write permissions
+3. **Performance**: Lima uses Apple's Virtualization.framework for near-native speed
+4. **Persistence**: VM state and development environment persist between sessions
+5. **Direct access**: Use `limactl shell nix-dev` for direct VM shell access
+6. **Convenient aliases**: VM includes pre-configured aliases (`tcd`, `tbuild`, `ttest`, etc.)
+7. **Nix integration**: Determinate Nix provides faster, more reliable package management
 
 ## Important Notes
 
