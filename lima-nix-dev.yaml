@@ -31,9 +31,9 @@ provision:
     #!/bin/bash
     set -eux -o pipefail
     
-    # Update system and install essential packages
+    # Install minimal system packages needed for Nix installation
     apt-get update
-    apt-get install -y curl git build-essential pkg-config
+    apt-get install -y curl
     
     # Install Determinate Nix - faster and more reliable than standard Nix installer
     curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install --no-confirm
