@@ -54,9 +54,6 @@
           pkgs.gdk-pixbuf.dev
           pkgs.atk
           pkgs.atk.dev
-          # Additional GDK packages
-          pkgs.gtk3-x11
-          pkgs.gtk3-x11.dev
           # Additional system libraries
           pkgs.fontconfig
           pkgs.freetype
